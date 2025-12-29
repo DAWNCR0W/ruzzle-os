@@ -1,0 +1,6 @@
+name = "net-panel"
+version = "0.1.0"
+provides = ["ruzzle.net.panel"]
+slots = ["ruzzle.slot.net"]
+requires_caps = []
+depends = ["net-service"]

@@ -1,0 +1,16 @@
+[package]
+name = "user_net_service"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "net-service"
+path = "src/main.rs"
+test = false
+bench = false

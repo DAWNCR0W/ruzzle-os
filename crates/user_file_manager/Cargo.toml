@@ -1,0 +1,17 @@
+[package]
+name = "user_file_manager"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+user_fs_service = { path = "../user_fs_service" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "file-manager"
+path = "src/main.rs"
+test = false
+bench = false

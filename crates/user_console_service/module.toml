@@ -1,0 +1,6 @@
+name = "console-service"
+version = "0.1.0"
+provides = ["ruzzle.console"]
+slots = ["ruzzle.slot.console"]
+requires_caps = ["ConsoleWrite", "EndpointCreate"]
+depends = []

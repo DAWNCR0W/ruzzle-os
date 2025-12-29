@@ -1,0 +1,6 @@
+name = "setup-wizard"
+version = "0.1.0"
+provides = ["ruzzle.setup"]
+slots = ["ruzzle.slot.setup"]
+requires_caps = []
+depends = ["settings-service", "user-service", "fs-service"]

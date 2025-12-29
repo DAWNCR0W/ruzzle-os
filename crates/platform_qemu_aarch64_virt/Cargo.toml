@@ -1,0 +1,11 @@
+[package]
+name = "platform_qemu_aarch64_virt"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+kernel_core = { path = "../kernel_core" }
+
+[lib]
+path = "src/lib.rs"

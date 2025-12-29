@@ -1,0 +1,17 @@
+[package]
+name = "user_tui_shell"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+ruzzle_protocol = { path = "../ruzzle_protocol" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "tui-shell"
+path = "src/main.rs"
+test = false
+bench = false

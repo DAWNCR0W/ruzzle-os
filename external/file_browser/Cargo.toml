@@ -1,0 +1,19 @@
+[package]
+name = "file_browser"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+
+[lib]
+name = "file_browser"
+path = "src/lib.rs"
+
+[[bin]]
+name = "file-browser"
+path = "src/main.rs"
+test = false
+bench = false
+
+[workspace]

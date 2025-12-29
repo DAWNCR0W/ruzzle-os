@@ -1,0 +1,6 @@
+name = "text-editor"
+version = "0.1.0"
+provides = ["ruzzle.editor"]
+slots = ["ruzzle.slot.editor"]
+requires_caps = []
+depends = ["fs-service"]

@@ -1,0 +1,6 @@
+name = "user-service"
+version = "0.1.0"
+provides = ["ruzzle.user"]
+slots = ["ruzzle.slot.user"]
+requires_caps = []
+depends = []

@@ -1,0 +1,6 @@
+name = "init"
+version = "0.1.0"
+provides = ["ruzzle.init"]
+slots = ["ruzzle.slot.init"]
+requires_caps = ["ProcessSpawn", "EndpointCreate"]
+depends = []

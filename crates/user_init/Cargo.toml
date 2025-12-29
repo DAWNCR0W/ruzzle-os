@@ -1,0 +1,18 @@
+[package]
+name = "user_init"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+hal = { path = "../hal" }
+ruzzle_protocol = { path = "../ruzzle_protocol" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "init"
+path = "src/main.rs"
+test = false
+bench = false

@@ -1,0 +1,11 @@
+[package]
+name = "arch_aarch64"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+hal = { path = "../hal" }
+
+[lib]
+path = "src/lib.rs"

@@ -1,0 +1,19 @@
+[package]
+name = "user_setup_wizard"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+user_fs_service = { path = "../user_fs_service" }
+user_settings_service = { path = "../user_settings_service" }
+user_user_service = { path = "../user_user_service" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "setup-wizard"
+path = "src/main.rs"
+test = false
+bench = false

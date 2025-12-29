@@ -1,0 +1,17 @@
+[package]
+name = "user_session_service"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+user_user_service = { path = "../user_user_service" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "session-service"
+path = "src/main.rs"
+test = false
+bench = false

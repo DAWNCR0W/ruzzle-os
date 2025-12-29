@@ -1,0 +1,19 @@
+[package]
+name = "vim_piece"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+
+[lib]
+name = "vim_piece"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vim-piece"
+path = "src/main.rs"
+test = false
+bench = false
+
+[workspace]

@@ -1,0 +1,22 @@
+[package]
+name = "user_sysinfo_service"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+user_puzzle_board = { path = "../user_puzzle_board" }
+user_session_service = { path = "../user_session_service" }
+user_settings_service = { path = "../user_settings_service" }
+
+[dev-dependencies]
+user_user_service = { path = "../user_user_service" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "sysinfo-service"
+path = "src/main.rs"
+test = false
+bench = false

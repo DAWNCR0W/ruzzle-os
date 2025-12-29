@@ -1,0 +1,50 @@
+use hal::PhysAddr;
+
+/// Boot information passed from platform-specific code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BootInfo<'a> {
+    pub memory_map: &'a [MemoryRegion],
+    pub kernel_start: PhysAddr,
+    pub kernel_end: PhysAddr,
+    pub initramfs: Option<(PhysAddr, PhysAddr)>,
+    pub dtb_ptr: Option<PhysAddr>,
+}
+
+/// Describes a contiguous physical memory region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MemoryRegion {
+    pub start: PhysAddr,
+    pub end: PhysAddr,
+    pub kind: MemoryKind,
+}
+
+/// Enumerates the physical memory region types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryKind {
+    Usable,
+    Reserved,
+    Mmio,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn boot_info_holds_memory_map() {
+        let regions = [MemoryRegion {
+            start: 0x1000,
+            end: 0x2000,
+            kind: MemoryKind::Usable,
+        }];
+        let info = BootInfo {
+            memory_map: &regions,
+            kernel_start: 0x0,
+            kernel_end: 0x1000,
+            initramfs: None,
+            dtb_ptr: None,
+        };
+        assert_eq!(info.memory_map.len(), 1);
+        assert_eq!(info.memory_map[0].kind, MemoryKind::Usable);
+    }
+}

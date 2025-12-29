@@ -1,0 +1,6 @@
+name = "net-service"
+version = "0.1.0"
+provides = ["ruzzle.net"]
+slots = ["ruzzle.slot.net"]
+requires_caps = []
+depends = []
