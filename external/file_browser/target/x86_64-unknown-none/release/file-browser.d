@@ -1,1 +1,0 @@
-/Users/macbook/Documents/GitHub/ruzzle-os/external/file_browser/target/x86_64-unknown-none/release/file-browser: /Users/macbook/Documents/GitHub/ruzzle-os/external/file_browser/src/lib.rs /Users/macbook/Documents/GitHub/ruzzle-os/external/file_browser/src/main.rs

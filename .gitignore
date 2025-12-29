@@ -1,6 +1,6 @@
 /.DS_Store
-/build/
-/target/
+**/build/
+**/target/
 *.iso
 *.img
 *.log
