@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.container@1"
+summary = "Container runtime orchestration and lifecycle control."
+provides = ["ruzzle.container"]
+requires_caps = ["ProcessSpawn"]

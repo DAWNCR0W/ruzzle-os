@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.gpu@1"
+summary = "GPU/accelerator service for rendering or compute."
+provides = ["ruzzle.gpu"]
+requires_caps = ["GpuDevice"]

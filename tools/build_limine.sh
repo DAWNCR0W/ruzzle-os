@@ -38,6 +38,7 @@ ensure_limine() {
   require_tool make
   require_tool python3
   require_tool nasm
+  require_tool mtools
 
   mkdir -p "${BUILD_DIR}"
   rm -rf "${LIMINE_SRC}" "${LIMINE_DIR}"
@@ -98,9 +99,9 @@ SH
 
   pushd "${LIMINE_SRC}" >/dev/null
   if [ "${#configure_env[@]}" -eq 0 ]; then
-    ./configure --enable-bios --enable-bios-cd
+    ./configure --enable-bios --enable-bios-cd --enable-uefi-x86-64 --enable-uefi-cd
   else
-    env "${configure_env[@]}" ./configure --enable-bios --enable-bios-cd
+    env "${configure_env[@]}" ./configure --enable-bios --enable-bios-cd --enable-uefi-x86-64 --enable-uefi-cd
   fi
   make
   popd >/dev/null
@@ -108,6 +109,8 @@ SH
   mkdir -p "${LIMINE_DIR}"
   cp "${LIMINE_SRC}/bin/limine-bios.sys" "${LIMINE_DIR}/limine-bios.sys"
   cp "${LIMINE_SRC}/bin/limine-bios-cd.bin" "${LIMINE_DIR}/limine-bios-cd.bin"
+  cp "${LIMINE_SRC}/bin/limine-uefi-cd.bin" "${LIMINE_DIR}/limine-uefi-cd.bin"
+  cp "${LIMINE_SRC}/bin/BOOTX64.EFI" "${LIMINE_DIR}/BOOTX64.EFI"
   cat > "${LIMINE_DIR}/limine-deploy" <<SH
 #!/usr/bin/env bash
 exec "${LIMINE_SRC}/bin/limine" bios-install "\$@"

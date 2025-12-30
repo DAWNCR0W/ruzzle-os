@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.session@1"
+summary = "Session service for logins and active user state."
+provides = ["ruzzle.session"]
+requires_caps = []

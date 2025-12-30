@@ -7,6 +7,7 @@ This guide explains how to build a bootable ISO and run it in QEMU or UTM.
 - `cargo`
 - `python3`
 - `xorriso`
+- `mtools` (for Limine UEFI CD image)
 - `qemu-system-x86_64` (for QEMU)
 - `nasm`, `make`, `curl`, `tar`
 - `binutils` (for `readelf` on macOS)
@@ -27,6 +28,8 @@ Output:
 ```
 build/ruzzle-x86_64.iso
 ```
+
+The ISO is now **hybrid (BIOS + UEFI)** using Limine.
 
 ## Run in QEMU
 
@@ -95,8 +98,9 @@ write <path> <text>
 rm <path>
 rm -r <path>
 slots
-plug <slot> <module>
+plug [--dry-run|-n] <slot> <module>
 unplug <slot>
+graph
 sysinfo
 log tail
 help [command]
@@ -112,19 +116,32 @@ tools/pack_external_module.sh path/to/module.toml path/to/elf
 tools/build_iso_x86.sh
 ```
 
+Signed bundles are required for catalog install. Set `RUZZLE_MARKETPLACE_KEY`
+to override the dev signing key when packing pieces.
+
 ## Run in UTM (macOS)
 
 1) Create a new **x86_64 (Emulated)** VM in UTM  
-2) Choose **BIOS** boot  
+2) Choose **UEFI** boot  
 3) Attach `build/ruzzle-x86_64.iso` as a CD/DVD  
 4) Boot the VM  
 
-UTM will display Limine, then the kernel serial shell over the VM console.
+UTM will display Limine and the framebuffer console.
+Serial logging remains available for debugging.
 
 ## VGA Console Input
 
 The x86_64 build now mirrors output to the VGA text buffer and accepts PS/2 keyboard input.
 In UTM you can type directly into the VM display without opening a serial console.
+
+If your VM does not expose a PS/2 keyboard, attach a serial device and use the
+serial console as a fallback. The kernel will consume input from both sources.
+
+## Framebuffer Console
+
+Limine framebuffer output is enabled for UEFI/BIOS hybrid boots. When a
+framebuffer is present, the kernel renders the TUI into it and continues to
+mirror logs to the serial console.
 
 ## AArch64 (DTB boot path)
 

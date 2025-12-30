@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.ml@1"
+summary = "Machine learning runtime and model execution."
+provides = ["ruzzle.ml"]
+requires_caps = []

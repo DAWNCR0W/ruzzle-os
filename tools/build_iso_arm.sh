@@ -49,6 +49,14 @@ cargo build -p user_settings_service --target aarch64-unknown-none --release
 cargo build -p user_session_service --target aarch64-unknown-none --release
 cargo build -p user_setup_wizard --target aarch64-unknown-none --release
 cargo build -p user_sysinfo_service --target aarch64-unknown-none --release
+cargo build -p user_rust_toolchain --target aarch64-unknown-none --release
+cargo build -p user_container_service --target aarch64-unknown-none --release
+cargo build -p user_server_stack --target aarch64-unknown-none --release
+cargo build -p user_net_manager --target aarch64-unknown-none --release
+cargo build -p user_device_manager --target aarch64-unknown-none --release
+cargo build -p user_input_service --target aarch64-unknown-none --release
+cargo build -p user_gpu_service --target aarch64-unknown-none --release
+cargo build -p user_ml_runtime --target aarch64-unknown-none --release
 
 cp "${ROOT_DIR}/target/aarch64-unknown-none/release/init" "${INITRAMFS_DIR}/init"
 cp "${ROOT_DIR}/target/aarch64-unknown-none/release/console-service" "${INITRAMFS_DIR}/console-service"
@@ -106,10 +114,54 @@ python3 "${ROOT_DIR}/tools/pack_module.py" \
   "${ROOT_DIR}/crates/user_sysinfo_service/module.toml" \
   "${ROOT_DIR}/target/aarch64-unknown-none/release/sysinfo-service"
 
+python3 "${ROOT_DIR}/tools/pack_module.py" \
+  "${STORE_DIR}/rust-toolchain.rpiece" \
+  "${ROOT_DIR}/crates/user_rust_toolchain/module.toml" \
+  "${ROOT_DIR}/target/aarch64-unknown-none/release/rust-toolchain"
+
+python3 "${ROOT_DIR}/tools/pack_module.py" \
+  "${STORE_DIR}/docker-service.rpiece" \
+  "${ROOT_DIR}/crates/user_container_service/module.toml" \
+  "${ROOT_DIR}/target/aarch64-unknown-none/release/docker-service"
+
+python3 "${ROOT_DIR}/tools/pack_module.py" \
+  "${STORE_DIR}/server-stack.rpiece" \
+  "${ROOT_DIR}/crates/user_server_stack/module.toml" \
+  "${ROOT_DIR}/target/aarch64-unknown-none/release/server-stack"
+
+python3 "${ROOT_DIR}/tools/pack_module.py" \
+  "${STORE_DIR}/net-manager.rpiece" \
+  "${ROOT_DIR}/crates/user_net_manager/module.toml" \
+  "${ROOT_DIR}/target/aarch64-unknown-none/release/net-manager"
+
+python3 "${ROOT_DIR}/tools/pack_module.py" \
+  "${STORE_DIR}/device-manager.rpiece" \
+  "${ROOT_DIR}/crates/user_device_manager/module.toml" \
+  "${ROOT_DIR}/target/aarch64-unknown-none/release/device-manager"
+
+python3 "${ROOT_DIR}/tools/pack_module.py" \
+  "${STORE_DIR}/input-service.rpiece" \
+  "${ROOT_DIR}/crates/user_input_service/module.toml" \
+  "${ROOT_DIR}/target/aarch64-unknown-none/release/input-service"
+
+python3 "${ROOT_DIR}/tools/pack_module.py" \
+  "${STORE_DIR}/gpu-service.rpiece" \
+  "${ROOT_DIR}/crates/user_gpu_service/module.toml" \
+  "${ROOT_DIR}/target/aarch64-unknown-none/release/gpu-service"
+
+python3 "${ROOT_DIR}/tools/pack_module.py" \
+  "${STORE_DIR}/ml-runtime.rpiece" \
+  "${ROOT_DIR}/crates/user_ml_runtime/module.toml" \
+  "${ROOT_DIR}/target/aarch64-unknown-none/release/ml-runtime"
+
 EXTERNAL_DIR="${ROOT_DIR}/modules"
 if compgen -G "${EXTERNAL_DIR}/*.rpiece" > /dev/null; then
   cp "${EXTERNAL_DIR}"/*.rpiece "${STORE_DIR}/"
 fi
+
+python3 "${ROOT_DIR}/tools/market_scan.py" \
+  --input "${STORE_DIR}" \
+  --output "${STORE_DIR}/index.toml"
 
 "${ROOT_DIR}/tools/mk_initramfs.py" "${INITRAMFS_IMG}" "${INITRAMFS_DIR}"
 
