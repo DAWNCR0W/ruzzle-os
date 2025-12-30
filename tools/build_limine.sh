@@ -29,7 +29,11 @@ PY
 }
 
 ensure_limine() {
-  if [ -x "${LIMINE_DIR}/limine-deploy" ] && [ -f "${LIMINE_DIR}/limine-bios.sys" ] && [ -f "${LIMINE_DIR}/limine-bios-cd.bin" ]; then
+  if [ -x "${LIMINE_DIR}/limine-deploy" ] \
+    && [ -f "${LIMINE_DIR}/limine-bios.sys" ] \
+    && [ -f "${LIMINE_DIR}/limine-bios-cd.bin" ] \
+    && [ -f "${LIMINE_DIR}/limine-uefi-cd.bin" ] \
+    && [ -f "${LIMINE_DIR}/BOOTX64.EFI" ]; then
     return 0
   fi
 

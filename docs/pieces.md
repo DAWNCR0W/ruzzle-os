@@ -298,7 +298,7 @@ Repeat with `vim-piece`, `net-panel`, or `file-browser` as needed.
 
 ## AArch64 Notes
 
-Use `tools/build_iso_arm.sh` to generate a kernel + initramfs bundle under `build/aarch64/`.
+Use `tools/build_bundle_arm.sh` to generate a kernel + initramfs bundle under `build/aarch64/`.
 The AArch64 boot path is stubbed; `tools/run_qemu_arm.sh --force` attempts boot anyway.
 
 ---

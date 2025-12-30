@@ -45,7 +45,7 @@ user_ml_runtime/              # ML inference runtime
 
 tools/
 build_iso_x86.sh
-build_iso_arm.sh
+build_bundle_arm.sh
 run_qemu_x86.sh
 run_qemu_arm.sh
 mk_initramfs.py

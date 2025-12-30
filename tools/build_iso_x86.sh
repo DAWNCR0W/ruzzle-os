@@ -181,6 +181,7 @@ cp "${LIMINE_DIR}/limine-uefi-cd.bin" "${ISO_DIR}/boot/limine/"
 mkdir -p "${ISO_DIR}/EFI/BOOT"
 cp "${LIMINE_DIR}/BOOTX64.EFI" "${ISO_DIR}/EFI/BOOT/BOOTX64.EFI"
 
+pushd "${ISO_DIR}" >/dev/null
 xorriso -as mkisofs \
   -R -r -J \
   -b boot/limine/limine-bios-cd.bin \
@@ -190,12 +191,9 @@ xorriso -as mkisofs \
   -hfsplus \
   -apm-block-size 2048 \
   --efi-boot boot/limine/limine-uefi-cd.bin \
-  -efi-boot-part \
-  -efi-boot-image \
   --protective-msdos-label \
-  "${ISO_DIR}" \
+  . \
   -o "${ISO_PATH}"
-
-"${LIMINE_DIR}/limine-deploy" "${ISO_PATH}"
+popd >/dev/null
 
 echo "ISO ready: ${ISO_PATH}"

@@ -131,17 +131,33 @@ Serial logging remains available for debugging.
 
 ## VGA Console Input
 
-The x86_64 build now mirrors output to the VGA text buffer and accepts PS/2 keyboard input.
-In UTM you can type directly into the VM display without opening a serial console.
+The x86_64 build mirrors output to the VGA text buffer and accepts **PS/2**,
+**legacy virtio** keyboards, and **USB xHCI HID boot** keyboards. In UTM you
+can type directly into the VM display without opening a serial console.
 
-If your VM does not expose a PS/2 keyboard, attach a serial device and use the
-serial console as a fallback. The kernel will consume input from both sources.
+If your VM does not expose any of these devices, attach a serial device and use
+the serial console as a fallback. The kernel consumes input from all sources.
 
 ## Framebuffer Console
 
 Limine framebuffer output is enabled for UEFI/BIOS hybrid boots. When a
 framebuffer is present, the kernel renders the TUI into it and continues to
 mirror logs to the serial console.
+
+Note: UTM defaults to USB 3.0 (xHCI) input devices, which are now supported.
+If input still fails, attach a serial device and use the serial console (UTM
+"Serial" device) for input.
+
+If you can add custom QEMU arguments in UTM or QEMU, you can also use a legacy
+virtio keyboard:
+```
+-device virtio-keyboard-pci,disable-modern=on
+```
+
+For a USB controller explicitly in QEMU:
+```
+-device qemu-xhci -device usb-kbd
+```
 
 ## AArch64 (DTB boot path)
 
@@ -153,7 +169,7 @@ The AArch64 path uses a minimal DTB boot flow on QEMU `virt`:
 Build artifacts for QEMU/UTM:
 
 ```bash
-tools/build_iso_arm.sh
+tools/build_bundle_arm.sh
 tools/run_qemu_arm.sh
 ```
 
