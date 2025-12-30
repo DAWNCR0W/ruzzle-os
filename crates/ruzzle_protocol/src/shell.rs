@@ -28,8 +28,21 @@ pub const TLV_CONTENT: u16 = 9;
 pub const TLV_SRC: u16 = 10;
 /// TLV type for copy/move destination path.
 pub const TLV_DST: u16 = 11;
-/// TLV type for boolean flags.
+/// TLV type for command flag bits.
 pub const TLV_FLAG: u16 = 12;
+/// TLV type for raw argument strings.
+pub const TLV_ARGS: u16 = 13;
+
+/// Flag bit for recursive copy.
+pub const FLAG_RECURSIVE: u8 = 0b0000_0001;
+/// Flag bit for dry-run operations.
+pub const FLAG_DRY_RUN: u8 = 0b0000_0001;
+/// Flag bit for catalog verified-only filtering.
+pub const FLAG_VERIFIED_ONLY: u8 = 0b0000_0001;
+/// Flag bit reserved for hot-swap.
+pub const FLAG_SWAP: u8 = 0b0000_0010;
+/// Flag bit for process tree output.
+pub const FLAG_TREE: u8 = 0b0000_0001;
 
 /// Shell message: list processes.
 pub const MSG_PS: u8 = 1;
@@ -95,6 +108,22 @@ pub const MSG_UNPLUG: u8 = 30;
 pub const MSG_SYSINFO: u8 = 31;
 /// Shell message: remove file or directory.
 pub const MSG_RM: u8 = 32;
+/// Shell message: dependency graph.
+pub const MSG_GRAPH: u8 = 33;
+/// Shell message: piece health check.
+pub const MSG_PIECE_CHECK: u8 = 34;
+/// Shell message: ip command.
+pub const MSG_IP: u8 = 35;
+/// Shell message: route command.
+pub const MSG_ROUTE: u8 = 36;
+/// Shell message: mount command.
+pub const MSG_MOUNT: u8 = 37;
+/// Shell message: df command.
+pub const MSG_DF: u8 = 38;
+/// Shell message: du command.
+pub const MSG_DU: u8 = 39;
+/// Shell message: market scan command.
+pub const MSG_MARKET_SCAN: u8 = 40;
 
 /// Shell response status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,13 +152,25 @@ impl ShellStatus {
 /// Shell command message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShellCommand {
-    Ps,
+    Ps {
+        tree: bool,
+    },
     Lsmod,
     Start(String),
     Stop(String),
     LogTail,
     Help(Option<String>),
-    Catalog,
+    Catalog {
+        slot: Option<String>,
+        verified_only: bool,
+    },
+    PieceCheck(String),
+    Ip(Option<String>),
+    Route(Option<String>),
+    Mount(Option<String>),
+    Df(Option<String>),
+    Du(String),
+    MarketScan,
     Install(String),
     Remove(String),
     Setup,
@@ -151,8 +192,14 @@ pub enum ShellCommand {
     Write { path: String, contents: String },
     RmRecursive(String),
     Slots,
-    Plug { slot: String, module: String },
+    Plug {
+        slot: String,
+        module: String,
+        dry_run: bool,
+        swap: bool,
+    },
     Unplug(String),
+    Graph,
     Sysinfo,
     Rm(String),
 }
@@ -168,7 +215,12 @@ pub struct ShellResponse {
 pub fn encode_command(command: &ShellCommand) -> Vec<u8> {
     let mut bytes = Vec::new();
     match command {
-        ShellCommand::Ps => write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_PS]),
+        ShellCommand::Ps { tree } => {
+            write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_PS]);
+            if *tree {
+                write_tlv(&mut bytes, TLV_FLAG, &[FLAG_TREE]);
+            }
+        }
         ShellCommand::Lsmod => write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_LSMOD]),
         ShellCommand::Start(module) => {
             write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_START]);
@@ -185,7 +237,51 @@ pub fn encode_command(command: &ShellCommand) -> Vec<u8> {
                 write_tlv(&mut bytes, TLV_TOPIC, topic.as_bytes());
             }
         }
-        ShellCommand::Catalog => write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_CATALOG]),
+        ShellCommand::Catalog {
+            slot,
+            verified_only,
+        } => {
+            write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_CATALOG]);
+            if let Some(slot) = slot {
+                write_tlv(&mut bytes, TLV_SLOT, slot.as_bytes());
+            }
+            if *verified_only {
+                write_tlv(&mut bytes, TLV_FLAG, &[FLAG_VERIFIED_ONLY]);
+            }
+        }
+        ShellCommand::PieceCheck(module) => {
+            write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_PIECE_CHECK]);
+            write_tlv(&mut bytes, TLV_MODULE, module.as_bytes());
+        }
+        ShellCommand::Ip(args) => {
+            write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_IP]);
+            if let Some(args) = args {
+                write_tlv(&mut bytes, TLV_ARGS, args.as_bytes());
+            }
+        }
+        ShellCommand::Route(args) => {
+            write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_ROUTE]);
+            if let Some(args) = args {
+                write_tlv(&mut bytes, TLV_ARGS, args.as_bytes());
+            }
+        }
+        ShellCommand::Mount(args) => {
+            write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_MOUNT]);
+            if let Some(args) = args {
+                write_tlv(&mut bytes, TLV_ARGS, args.as_bytes());
+            }
+        }
+        ShellCommand::Df(path) => {
+            write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_DF]);
+            if let Some(path) = path {
+                write_tlv(&mut bytes, TLV_PATH, path.as_bytes());
+            }
+        }
+        ShellCommand::Du(path) => {
+            write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_DU]);
+            write_tlv(&mut bytes, TLV_PATH, path.as_bytes());
+        }
+        ShellCommand::MarketScan => write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_MARKET_SCAN]),
         ShellCommand::Install(module) => {
             write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_INSTALL]);
             write_tlv(&mut bytes, TLV_MODULE, module.as_bytes());
@@ -237,7 +333,9 @@ pub fn encode_command(command: &ShellCommand) -> Vec<u8> {
             write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_CP]);
             write_tlv(&mut bytes, TLV_SRC, src.as_bytes());
             write_tlv(&mut bytes, TLV_DST, dst.as_bytes());
-            write_tlv(&mut bytes, TLV_FLAG, &[u8::from(*recursive)]);
+            if *recursive {
+                write_tlv(&mut bytes, TLV_FLAG, &[FLAG_RECURSIVE]);
+            }
         }
         ShellCommand::Mv { src, dst } => {
             write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_MV]);
@@ -254,15 +352,31 @@ pub fn encode_command(command: &ShellCommand) -> Vec<u8> {
             write_tlv(&mut bytes, TLV_CONTENT, contents.as_bytes());
         }
         ShellCommand::Slots => write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_SLOTS]),
-        ShellCommand::Plug { slot, module } => {
+        ShellCommand::Plug {
+            slot,
+            module,
+            dry_run,
+            swap,
+        } => {
             write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_PLUG]);
             write_tlv(&mut bytes, TLV_SLOT, slot.as_bytes());
             write_tlv(&mut bytes, TLV_MODULE, module.as_bytes());
+            let mut flags = 0u8;
+            if *dry_run {
+                flags |= FLAG_DRY_RUN;
+            }
+            if *swap {
+                flags |= FLAG_SWAP;
+            }
+            if flags != 0 {
+                write_tlv(&mut bytes, TLV_FLAG, &[flags]);
+            }
         }
         ShellCommand::Unplug(slot) => {
             write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_UNPLUG]);
             write_tlv(&mut bytes, TLV_SLOT, slot.as_bytes());
         }
+        ShellCommand::Graph => write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_GRAPH]),
         ShellCommand::Sysinfo => write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_SYSINFO]),
         ShellCommand::Rm(path) => {
             write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_RM]);
@@ -287,7 +401,8 @@ pub fn decode_command(bytes: &[u8]) -> Result<ShellCommand, ProtocolError> {
     let mut content: Option<String> = None;
     let mut src: Option<String> = None;
     let mut dst: Option<String> = None;
-    let mut flag: Option<bool> = None;
+    let mut args: Option<String> = None;
+    let mut flag: Option<u8> = None;
 
     let mut reader = TlvReader::new(bytes);
     while let Some(field) = reader.next()? {
@@ -349,6 +464,12 @@ pub fn decode_command(bytes: &[u8]) -> Result<ShellCommand, ProtocolError> {
                 }
                 dst = Some(parse_string(field.value)?);
             }
+            TLV_ARGS => {
+                if args.is_some() {
+                    return Err(ProtocolError::DuplicateField("args"));
+                }
+                args = Some(parse_string(field.value)?);
+            }
             TLV_FLAG => {
                 if flag.is_some() {
                     return Err(ProtocolError::DuplicateField("flag"));
@@ -356,7 +477,7 @@ pub fn decode_command(bytes: &[u8]) -> Result<ShellCommand, ProtocolError> {
                 if field.value.len() != 1 {
                     return Err(ProtocolError::InvalidLength("flag"));
                 }
-                flag = Some(field.value[0] != 0);
+                flag = Some(field.value[0]);
             }
             _ => {}
         }
@@ -364,7 +485,9 @@ pub fn decode_command(bytes: &[u8]) -> Result<ShellCommand, ProtocolError> {
 
     let msg_type = msg_type.ok_or(ProtocolError::MissingField("msg_type"))?;
     match msg_type {
-        MSG_PS => Ok(ShellCommand::Ps),
+        MSG_PS => Ok(ShellCommand::Ps {
+            tree: flag.map(|bits| bits & FLAG_TREE != 0).unwrap_or(false),
+        }),
         MSG_LSMOD => Ok(ShellCommand::Lsmod),
         MSG_START => Ok(ShellCommand::Start(
             module.ok_or(ProtocolError::MissingField("module"))?,
@@ -374,7 +497,23 @@ pub fn decode_command(bytes: &[u8]) -> Result<ShellCommand, ProtocolError> {
         )),
         MSG_LOG_TAIL => Ok(ShellCommand::LogTail),
         MSG_HELP => Ok(ShellCommand::Help(topic)),
-        MSG_CATALOG => Ok(ShellCommand::Catalog),
+        MSG_CATALOG => Ok(ShellCommand::Catalog {
+            slot,
+            verified_only: flag
+                .map(|bits| bits & FLAG_VERIFIED_ONLY != 0)
+                .unwrap_or(false),
+        }),
+        MSG_PIECE_CHECK => Ok(ShellCommand::PieceCheck(
+            module.ok_or(ProtocolError::MissingField("module"))?,
+        )),
+        MSG_IP => Ok(ShellCommand::Ip(args)),
+        MSG_ROUTE => Ok(ShellCommand::Route(args)),
+        MSG_MOUNT => Ok(ShellCommand::Mount(args)),
+        MSG_DF => Ok(ShellCommand::Df(path)),
+        MSG_DU => Ok(ShellCommand::Du(
+            path.ok_or(ProtocolError::MissingField("path"))?,
+        )),
+        MSG_MARKET_SCAN => Ok(ShellCommand::MarketScan),
         MSG_INSTALL => Ok(ShellCommand::Install(
             module.ok_or(ProtocolError::MissingField("module"))?,
         )),
@@ -411,7 +550,7 @@ pub fn decode_command(bytes: &[u8]) -> Result<ShellCommand, ProtocolError> {
         MSG_CP => Ok(ShellCommand::Cp {
             src: src.ok_or(ProtocolError::MissingField("src"))?,
             dst: dst.ok_or(ProtocolError::MissingField("dst"))?,
-            recursive: flag.unwrap_or(false),
+            recursive: flag.map(|bits| bits & FLAG_RECURSIVE != 0).unwrap_or(false),
         }),
         MSG_MV => Ok(ShellCommand::Mv {
             src: src.ok_or(ProtocolError::MissingField("src"))?,
@@ -428,10 +567,13 @@ pub fn decode_command(bytes: &[u8]) -> Result<ShellCommand, ProtocolError> {
         MSG_PLUG => Ok(ShellCommand::Plug {
             slot: slot.ok_or(ProtocolError::MissingField("slot"))?,
             module: module.ok_or(ProtocolError::MissingField("module"))?,
+            dry_run: flag.map(|bits| bits & FLAG_DRY_RUN != 0).unwrap_or(false),
+            swap: flag.map(|bits| bits & FLAG_SWAP != 0).unwrap_or(false),
         }),
         MSG_UNPLUG => Ok(ShellCommand::Unplug(
             slot.ok_or(ProtocolError::MissingField("slot"))?,
         )),
+        MSG_GRAPH => Ok(ShellCommand::Graph),
         MSG_SYSINFO => Ok(ShellCommand::Sysinfo),
         MSG_RM => Ok(ShellCommand::Rm(
             path.ok_or(ProtocolError::MissingField("path"))?,
@@ -514,7 +656,15 @@ mod tests {
 
     #[test]
     fn encode_decode_ps_command() {
-        let cmd = ShellCommand::Ps;
+        let cmd = ShellCommand::Ps { tree: false };
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_ps_command_tree() {
+        let cmd = ShellCommand::Ps { tree: true };
         let bytes = encode_command(&cmd);
         let decoded = decode_command(&bytes).expect("decode should succeed");
         assert_eq!(decoded, cmd);
@@ -538,7 +688,109 @@ mod tests {
 
     #[test]
     fn encode_decode_catalog_command() {
-        let cmd = ShellCommand::Catalog;
+        let cmd = ShellCommand::Catalog {
+            slot: None,
+            verified_only: false,
+        };
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_catalog_command_with_filters() {
+        let cmd = ShellCommand::Catalog {
+            slot: Some("ruzzle.slot.net@1".to_string()),
+            verified_only: true,
+        };
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_piece_check_command() {
+        let cmd = ShellCommand::PieceCheck("fs-service".to_string());
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_ip_command() {
+        let cmd = ShellCommand::Ip(Some("add eth0".to_string()));
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_ip_command_no_args() {
+        let cmd = ShellCommand::Ip(None);
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_route_command() {
+        let cmd = ShellCommand::Route(Some("add default eth0".to_string()));
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_route_command_no_args() {
+        let cmd = ShellCommand::Route(None);
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_mount_command() {
+        let cmd = ShellCommand::Mount(Some("memfs /mnt".to_string()));
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_mount_command_no_args() {
+        let cmd = ShellCommand::Mount(None);
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_df_command() {
+        let cmd = ShellCommand::Df(Some("/".to_string()));
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_df_command_no_path() {
+        let cmd = ShellCommand::Df(None);
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_du_command() {
+        let cmd = ShellCommand::Du("/etc".to_string());
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_market_scan_command() {
+        let cmd = ShellCommand::MarketScan;
         let bytes = encode_command(&cmd);
         let decoded = decode_command(&bytes).expect("decode should succeed");
         assert_eq!(decoded, cmd);
@@ -712,6 +964,18 @@ mod tests {
     }
 
     #[test]
+    fn encode_decode_cp_command_recursive() {
+        let cmd = ShellCommand::Cp {
+            src: "/etc".to_string(),
+            dst: "/backup/etc".to_string(),
+            recursive: true,
+        };
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
     fn encode_decode_mv_command() {
         let cmd = ShellCommand::Mv {
             src: "/etc/hostname".to_string(),
@@ -749,8 +1013,36 @@ mod tests {
     #[test]
     fn encode_decode_plug_command() {
         let cmd = ShellCommand::Plug {
-            slot: "ruzzle.slot.console".to_string(),
+            slot: "ruzzle.slot.console@1".to_string(),
             module: "console-service".to_string(),
+            dry_run: false,
+            swap: false,
+        };
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_plug_command_dry_run() {
+        let cmd = ShellCommand::Plug {
+            slot: "ruzzle.slot.console@1".to_string(),
+            module: "console-service".to_string(),
+            dry_run: true,
+            swap: false,
+        };
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_plug_command_swap() {
+        let cmd = ShellCommand::Plug {
+            slot: "ruzzle.slot.console@1".to_string(),
+            module: "console-service".to_string(),
+            dry_run: false,
+            swap: true,
         };
         let bytes = encode_command(&cmd);
         let decoded = decode_command(&bytes).expect("decode should succeed");
@@ -759,7 +1051,15 @@ mod tests {
 
     #[test]
     fn encode_decode_unplug_command() {
-        let cmd = ShellCommand::Unplug("ruzzle.slot.console".to_string());
+        let cmd = ShellCommand::Unplug("ruzzle.slot.console@1".to_string());
+        let bytes = encode_command(&cmd);
+        let decoded = decode_command(&bytes).expect("decode should succeed");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn encode_decode_graph_command() {
+        let cmd = ShellCommand::Graph;
         let bytes = encode_command(&cmd);
         let decoded = decode_command(&bytes).expect("decode should succeed");
         assert_eq!(decoded, cmd);
@@ -823,6 +1123,14 @@ mod tests {
     fn decode_command_rejects_missing_module_for_stop() {
         let mut bytes = Vec::new();
         write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_STOP]);
+        let result = decode_command(&bytes);
+        assert_eq!(result, Err(ProtocolError::MissingField("module")));
+    }
+
+    #[test]
+    fn decode_command_rejects_missing_module_for_piece_check() {
+        let mut bytes = Vec::new();
+        write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_PIECE_CHECK]);
         let result = decode_command(&bytes);
         assert_eq!(result, Err(ProtocolError::MissingField("module")));
     }
@@ -1039,6 +1347,14 @@ mod tests {
     }
 
     #[test]
+    fn decode_command_rejects_missing_path_for_du() {
+        let mut bytes = Vec::new();
+        write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_DU]);
+        let result = decode_command(&bytes);
+        assert_eq!(result, Err(ProtocolError::MissingField("path")));
+    }
+
+    #[test]
     fn decode_command_rejects_unknown_type() {
         let mut bytes = Vec::new();
         write_tlv(&mut bytes, TLV_MSG_TYPE, &[0x42]);
@@ -1079,8 +1395,8 @@ mod tests {
     fn decode_command_rejects_duplicate_slot() {
         let mut bytes = Vec::new();
         write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_UNPLUG]);
-        write_tlv(&mut bytes, TLV_SLOT, b"ruzzle.slot.console");
-        write_tlv(&mut bytes, TLV_SLOT, b"ruzzle.slot.shell");
+        write_tlv(&mut bytes, TLV_SLOT, b"ruzzle.slot.console@1");
+        write_tlv(&mut bytes, TLV_SLOT, b"ruzzle.slot.shell@1");
         let result = decode_command(&bytes);
         assert_eq!(result, Err(ProtocolError::DuplicateField("slot")));
     }
@@ -1117,6 +1433,16 @@ mod tests {
     }
 
     #[test]
+    fn decode_command_rejects_duplicate_args() {
+        let mut bytes = Vec::new();
+        write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_IP]);
+        write_tlv(&mut bytes, TLV_ARGS, b"addr show");
+        write_tlv(&mut bytes, TLV_ARGS, b"route show");
+        let result = decode_command(&bytes);
+        assert_eq!(result, Err(ProtocolError::DuplicateField("args")));
+    }
+
+    #[test]
     fn decode_command_rejects_invalid_utf8_module() {
         let mut bytes = Vec::new();
         write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_START]);
@@ -1140,6 +1466,15 @@ mod tests {
         write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_CP]);
         write_tlv(&mut bytes, TLV_SRC, &[0xFF]);
         write_tlv(&mut bytes, TLV_DST, b"/tmp/out");
+        let result = decode_command(&bytes);
+        assert_eq!(result, Err(ProtocolError::InvalidUtf8));
+    }
+
+    #[test]
+    fn decode_command_rejects_invalid_utf8_args() {
+        let mut bytes = Vec::new();
+        write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_IP]);
+        write_tlv(&mut bytes, TLV_ARGS, &[0xFF]);
         let result = decode_command(&bytes);
         assert_eq!(result, Err(ProtocolError::InvalidUtf8));
     }
@@ -1195,7 +1530,7 @@ mod tests {
     fn decode_command_rejects_missing_module_for_plug() {
         let mut bytes = Vec::new();
         write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_PLUG]);
-        write_tlv(&mut bytes, TLV_SLOT, b"ruzzle.slot.console");
+        write_tlv(&mut bytes, TLV_SLOT, b"ruzzle.slot.console@1");
         let result = decode_command(&bytes);
         assert_eq!(result, Err(ProtocolError::MissingField("module")));
     }
@@ -1216,7 +1551,7 @@ mod tests {
         write_tlv(&mut bytes, TLV_MSG_TYPE, &[MSG_PS]);
         write_tlv(&mut bytes, 0x9999, b"ignored");
         let result = decode_command(&bytes).expect("decode should succeed");
-        assert_eq!(result, ShellCommand::Ps);
+        assert_eq!(result, ShellCommand::Ps { tree: false });
     }
 
     #[test]

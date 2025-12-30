@@ -79,7 +79,7 @@ while [ $# -gt 0 ]; do
   done
 
 if [ "${NO_REBUILD}" -eq 0 ]; then
-  "${ROOT_DIR}/tools/build_iso_arm.sh"
+  "${ROOT_DIR}/tools/build_bundle_arm.sh"
 else
   if [ ! -f "${KERNEL_BIN}" ] || [ ! -f "${INITRAMFS_IMG}" ]; then
     echo "Missing AArch64 bundle. Run without --no-rebuild first." >&2

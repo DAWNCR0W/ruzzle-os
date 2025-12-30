@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.fs@1"
+summary = "Filesystem service providing storage primitives."
+provides = ["ruzzle.fs"]
+requires_caps = ["FsRoot"]

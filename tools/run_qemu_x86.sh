@@ -37,6 +37,7 @@ run_qemu() {
   fi
 
   local cmd=("${qemu_bin}" -m 512M -cdrom "${ISO_PATH}" -serial stdio -no-reboot -no-shutdown)
+  cmd+=(-device virtio-keyboard-pci,disable-modern=on)
   if [ "${ENABLE_GDB}" -eq 1 ]; then
     cmd+=(-s -S)
   fi

@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.toolchain@1"
+summary = "Rust toolchain integration for building and packaging pieces."
+provides = ["ruzzle.toolchain"]
+requires_caps = []

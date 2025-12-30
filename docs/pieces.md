@@ -10,6 +10,14 @@ This doc defines naming, packaging, and the recommended workflow for building an
 - **Concept name**: *Ruzzle Piece* (short: *piece*)
 - **Bundle extension**: `.rpiece`
 
+Slot contracts live in `slot_contracts/*.toml` and are documented in
+`docs/slot_contracts.md`. Validate contracts with:
+
+```bash
+tools/slot_lint.py slot_contracts
+tools/generate_slot_docs.py
+```
+
 ---
 
 ## Anatomy of a Piece
@@ -25,7 +33,7 @@ Example `module.toml`:
 name = "note-piece"
 version = "0.1.0"
 provides = ["ruzzle.notes"]
-slots = ["ruzzle.slot.editor"]
+slots = ["ruzzle.slot.editor@1"]
 requires_caps = []
 depends = []
 ```
@@ -33,7 +41,7 @@ depends = []
 Naming rules:
 - module names: `kebab-case` (e.g. `note-piece`)
 - services: `ruzzle.*` (e.g. `ruzzle.notes`)
-- slots: `ruzzle.slot.*` (e.g. `ruzzle.slot.editor`)
+- slots: `ruzzle.slot.*@<version>` (e.g. `ruzzle.slot.editor@1`)
 
 ---
 
@@ -87,6 +95,19 @@ tools/pack_external_module.sh path/to/module.toml path/to/elf
 
 The bundle lands in `modules/<name>.rpiece`.
 
+Signed bundles are required for the local marketplace. Override the signing key
+with `RUZZLE_MARKETPLACE_KEY` if you want to test a custom marketplace key.
+
+### Host toolchain helper
+
+Ruzzle ships a helper to build and pack pieces on the host:
+
+```bash
+tools/rpiece_build.sh path/to/piece-dir x86_64-unknown-none
+```
+
+It will compile the piece and emit a `.rpiece` bundle into `modules/`.
+
 6) **Rebuild ISO**
 
 ```bash
@@ -101,9 +122,74 @@ Inside the shell:
 
 ```
 catalog
+catalog --verified
+catalog --slot ruzzle.slot.editor@1
+piece check <piece-name>
+market scan
 install <piece-name>
 start <piece-name>
 slots
+```
+
+The catalog marks bundles as `[verified]` or `[unsigned]`. Unsigned bundles
+cannot be installed.
+
+`piece check <name>` reports signature status, dependency health, and slot
+compatibility with a dependency graph.
+
+`market scan` rebuilds the local catalog from initramfs bundles.
+
+Installs print a manifest summary (version, slots, caps, dependencies).
+
+`slots` and `graph` render as ASCII puzzle boards for quick scanning.
+
+---
+
+## Built-in Pieces (v0.1)
+
+Core:
+- `init`, `console-service`, `tui-shell`
+- `fs-service`, `user-service`, `session-service`, `settings-service`
+- `sysinfo-service`, `file-manager`, `text-editor`, `setup-wizard`
+
+Connectivity & devices:
+- `net-service`, `net-manager`
+- `input-service`, `device-manager`
+
+Compute & tooling:
+- `rust-toolchain`
+- `gpu-service`, `ml-runtime`
+- `docker-service` (container lifecycle)
+- `server-stack` (HTTP/TLS/metrics)
+
+### Quick usage snippets
+
+```text
+# containers
+catalog
+install docker-service
+start docker-service
+plug ruzzle.slot.container@1 docker-service
+
+# server stack
+install server-stack
+start server-stack
+plug ruzzle.slot.server@1 server-stack
+
+# gpu + ml
+install gpu-service
+start gpu-service
+plug ruzzle.slot.gpu@1 gpu-service
+install ml-runtime
+start ml-runtime
+plug ruzzle.slot.ml@1 ml-runtime
+```
+
+### Help topics
+
+```
+help slot
+help market
 ```
 
 Optional manual wiring:
@@ -113,10 +199,38 @@ plug <slot> <piece-name>
 unplug <slot>
 ```
 
+Dry-run a hot swap:
+
+```
+plug --dry-run ruzzle.slot.editor@1 vim-piece
+```
+
+Execute the swap (with rollback on failure):
+
+```
+plug --swap ruzzle.slot.editor@1 vim-piece
+```
+
+### Local market index
+
+The local marketplace is indexed into `modules/index.toml`. It is regenerated
+automatically when you pack a piece or build an ISO:
+
+```
+tools/market_scan.py
+```
+
+`catalog` reads bundles from the local market and supports filtering:
+
+```
+catalog --verified
+catalog --slot ruzzle.slot.editor@1
+```
+
 ### Vim-style editor flow
 
 The shell provides a built-in, vim-like line editor that is only enabled when the
-`ruzzle.slot.editor` slot is filled by a piece.
+`ruzzle.slot.editor@1` slot is filled by a piece.
 
 Example (using the bundled `vim-piece`):
 
@@ -124,7 +238,7 @@ Example (using the bundled `vim-piece`):
 catalog
 install vim-piece
 start vim-piece
-plug ruzzle.slot.editor vim-piece
+plug ruzzle.slot.editor@1 vim-piece
 edit /home/<user>/notes.txt
 ```
 
@@ -176,7 +290,7 @@ start note-piece
 slots
 ```
 
-You should see `note-piece` fill `ruzzle.slot.editor`.
+You should see `note-piece` fill `ruzzle.slot.editor@1`.
 
 Repeat with `vim-piece`, `net-panel`, or `file-browser` as needed.
 
@@ -184,7 +298,7 @@ Repeat with `vim-piece`, `net-panel`, or `file-browser` as needed.
 
 ## AArch64 Notes
 
-Use `tools/build_iso_arm.sh` to generate a kernel + initramfs bundle under `build/aarch64/`.
+Use `tools/build_bundle_arm.sh` to generate a kernel + initramfs bundle under `build/aarch64/`.
 The AArch64 boot path is stubbed; `tools/run_qemu_arm.sh --force` attempts boot anyway.
 
 ---

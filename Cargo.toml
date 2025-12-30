@@ -22,6 +22,14 @@ members = [
     "crates/user_setup_wizard",
     "crates/user_sysinfo_service",
     "crates/user_puzzle_board",
+    "crates/user_rust_toolchain",
+    "crates/user_container_service",
+    "crates/user_server_stack",
+    "crates/user_net_manager",
+    "crates/user_device_manager",
+    "crates/user_input_service",
+    "crates/user_gpu_service",
+    "crates/user_ml_runtime",
 ]
 
 default-members = [
@@ -41,4 +49,12 @@ default-members = [
     "crates/user_setup_wizard",
     "crates/user_sysinfo_service",
     "crates/user_puzzle_board",
+    "crates/user_rust_toolchain",
+    "crates/user_container_service",
+    "crates/user_server_stack",
+    "crates/user_net_manager",
+    "crates/user_device_manager",
+    "crates/user_input_service",
+    "crates/user_gpu_service",
+    "crates/user_ml_runtime",
 ]

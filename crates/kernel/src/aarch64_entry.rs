@@ -60,31 +60,40 @@ extern "C" {
 #[no_mangle]
 pub extern "C" fn aarch64_entry(dtb_ptr: u64) -> ! {
     unsafe {
-        let mut cursor = &mut __bss_start as *mut u8;
-        let end = &mut __bss_end as *mut u8;
+        let mut cursor = &raw mut __bss_start as *mut u8;
+        let end = &raw mut __bss_end as *mut u8;
         while cursor < end {
             core::ptr::write_volatile(cursor, 0);
             cursor = cursor.add(1);
         }
     }
-    kernel::console::init();
+    kernel::console::init_early();
     kprintln!("Ruzzle OS: aarch64 entry");
+    kernel::smp::init(1);
+    kernel::smp::set_online(1);
 
-    let kernel_start = unsafe { &__kernel_start as *const u8 as usize };
-    let kernel_end = unsafe { &__kernel_end as *const u8 as usize };
+    let kernel_start = unsafe { &__kernel_start as *const u8 as u64 };
+    let kernel_end = unsafe { &__kernel_end as *const u8 as u64 };
 
     #[cfg(feature = "qemu_virt")]
     {
-        let boot_info = platform::boot_info_from_dtb(dtb_ptr as usize, kernel_start, kernel_end);
-        return kernel::entry(boot_info);
+        let boot_info =
+            platform::boot_info_from_dtb(dtb_ptr as usize, kernel_start as usize, kernel_end as usize);
+        kernel::entry(boot_info)
     }
 
+    #[cfg(not(feature = "qemu_virt"))]
+    {
     let boot_info = kernel_core::BootInfo {
         memory_map: &[],
         kernel_start,
         kernel_end,
+        kernel_virtual_base: kernel_start,
         initramfs: None,
-        dtb_ptr: Some(dtb_ptr as usize),
+        dtb_ptr: Some(dtb_ptr),
+        framebuffer: None,
+        hhdm_offset: None,
     };
-    kernel::entry(boot_info)
+        kernel::entry(boot_info)
+    }
 }

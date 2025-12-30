@@ -1,6 +1,6 @@
 name = "sysinfo-service"
 version = "0.1.0"
 provides = ["ruzzle.sysinfo"]
-slots = ["ruzzle.slot.sysinfo"]
+slots = ["ruzzle.slot.sysinfo@1"]
 requires_caps = []
 depends = ["settings-service", "session-service"]

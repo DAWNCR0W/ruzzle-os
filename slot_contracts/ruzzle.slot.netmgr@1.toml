@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.netmgr@1"
+summary = "Network profile and policy manager."
+provides = ["ruzzle.netmgr"]
+requires_caps = []

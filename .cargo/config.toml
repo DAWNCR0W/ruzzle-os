@@ -11,6 +11,6 @@ rustflags = [
 rustflags = [
   "-C", "link-arg=-Tcrates/kernel/linker_aarch64.ld",
   "-C", "relocation-model=static",
-  "-C", "code-model=kernel",
+  "-C", "code-model=small",
   "-C", "panic=abort",
 ]
