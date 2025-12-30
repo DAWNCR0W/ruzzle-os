@@ -7,8 +7,8 @@ license = "Apache-2.0"
 [dependencies]
 hal = { path = "../hal" }
 x86_64 = "0.15"
-pic8259 = "0.10"
-spin = "0.9"
+pic8259 = "0.11"
+spin = "0.10"
 
 [lib]
 path = "src/lib.rs"
