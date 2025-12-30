@@ -8,6 +8,7 @@ pub struct BootInfo<'a> {
     pub kernel_end: PhysAddr,
     pub initramfs: Option<(PhysAddr, PhysAddr)>,
     pub dtb_ptr: Option<PhysAddr>,
+    pub framebuffer: Option<FramebufferInfo>,
 }
 
 /// Describes a contiguous physical memory region.
@@ -24,6 +25,22 @@ pub enum MemoryKind {
     Usable,
     Reserved,
     Mmio,
+}
+
+/// Describes a linear framebuffer provided by the bootloader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FramebufferInfo {
+    pub addr: PhysAddr,
+    pub width: u32,
+    pub height: u32,
+    pub pitch: u32,
+    pub bpp: u16,
+    pub red_mask_size: u8,
+    pub red_mask_shift: u8,
+    pub green_mask_size: u8,
+    pub green_mask_shift: u8,
+    pub blue_mask_size: u8,
+    pub blue_mask_shift: u8,
 }
 
 #[cfg(test)]
@@ -43,6 +60,7 @@ mod tests {
             kernel_end: 0x1000,
             initramfs: None,
             dtb_ptr: None,
+            framebuffer: None,
         };
         assert_eq!(info.memory_map.len(), 1);
         assert_eq!(info.memory_map[0].kind, MemoryKind::Usable);

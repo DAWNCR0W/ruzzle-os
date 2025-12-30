@@ -1,4 +1,5 @@
-use alloc::string::String;
+use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use hal::Errno;
@@ -64,11 +65,17 @@ pub fn parse_module_manifest(input: &str) -> Result<ModuleManifest, Errno> {
 
     let name = name.ok_or(Errno::InvalidArg)?;
     let version = version.ok_or(Errno::InvalidArg)?;
+    let slots = slots.unwrap_or_default();
+    let mut normalized_slots = Vec::with_capacity(slots.len());
+    for slot in slots {
+        normalized_slots.push(normalize_slot_version(&slot)?);
+    }
+
     Ok(ModuleManifest {
         name,
         version,
         provides: provides.unwrap_or_default(),
-        slots: slots.unwrap_or_default(),
+        slots: normalized_slots,
         requires_caps: requires_caps.unwrap_or_default(),
         depends: depends.unwrap_or_default(),
     })
@@ -109,6 +116,23 @@ fn parse_list(value: &str) -> Result<Vec<String>, Errno> {
     Ok(items)
 }
 
+fn normalize_slot_version(slot: &str) -> Result<String, Errno> {
+    let trimmed = slot.trim();
+    if trimmed.is_empty() {
+        return Err(Errno::InvalidArg);
+    }
+    if let Some((base, version)) = trimmed.rsplit_once('@') {
+        if base.is_empty()
+            || version.is_empty()
+            || !version.chars().all(|ch| ch.is_ascii_digit())
+        {
+            return Err(Errno::InvalidArg);
+        }
+        return Ok(trimmed.to_string());
+    }
+    Ok(format!("{}@1", trimmed))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,7 +154,7 @@ mod tests {
         assert_eq!(manifest.name, "console-service");
         assert_eq!(manifest.version, "0.1.0");
         assert_eq!(manifest.provides, vec!["ruzzle.console"]);
-        assert_eq!(manifest.slots, vec!["ruzzle.slot.console"]);
+        assert_eq!(manifest.slots, vec!["ruzzle.slot.console@1"]);
         assert_eq!(
             manifest.requires_caps,
             vec!["ConsoleWrite", "EndpointCreate"]
@@ -156,6 +180,56 @@ mod tests {
         assert!(manifest.slots.is_empty());
         assert!(manifest.requires_caps.is_empty());
         assert!(manifest.depends.is_empty());
+    }
+
+    #[test]
+    fn parse_manifest_normalizes_slot_versions() {
+        let manifest = parse_module_manifest(
+            r#"
+            name = "console-service"
+            version = "0.1.0"
+            provides = ["ruzzle.console"]
+            slots = ["ruzzle.slot.console", "ruzzle.slot.net@2"]
+            requires_caps = []
+            depends = []
+            "#,
+        )
+        .expect("manifest should parse");
+
+        assert_eq!(
+            manifest.slots,
+            vec!["ruzzle.slot.console@1", "ruzzle.slot.net@2"]
+        );
+    }
+
+    #[test]
+    fn parse_manifest_rejects_invalid_slot_version() {
+        let result = parse_module_manifest(
+            r#"
+            name = "console-service"
+            version = "0.1.0"
+            provides = ["ruzzle.console"]
+            slots = ["ruzzle.slot.console@bad"]
+            requires_caps = []
+            depends = []
+            "#,
+        );
+        assert_eq!(result, Err(Errno::InvalidArg));
+    }
+
+    #[test]
+    fn parse_manifest_rejects_empty_slot_string() {
+        let result = parse_module_manifest(
+            r#"
+            name = "console-service"
+            version = "0.1.0"
+            provides = ["ruzzle.console"]
+            slots = [""]
+            requires_caps = []
+            depends = []
+            "#,
+        );
+        assert_eq!(result, Err(Errno::InvalidArg));
     }
 
     #[test]

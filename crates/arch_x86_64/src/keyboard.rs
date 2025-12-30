@@ -10,6 +10,7 @@ const RIGHT_SHIFT: u8 = 0x36;
 static KEYBOARD_STATE: Mutex<KeyboardState> = Mutex::new(KeyboardState::new());
 
 pub fn keyboard_init() {
+    init_controller();
     KEYBOARD_STATE.lock().reset();
 }
 
@@ -28,6 +29,98 @@ pub fn keyboard_read_byte() -> Option<u8> {
     };
     let mut state = KEYBOARD_STATE.lock();
     apply_scancode(scancode, &mut state)
+}
+
+fn init_controller() {
+    if !wait_input_empty() {
+        return;
+    }
+    unsafe {
+        let mut cmd = Port::new(STATUS_PORT);
+        cmd.write(0xADu8);
+        cmd.write(0xA7u8);
+    }
+    flush_output();
+
+    if !wait_input_empty() {
+        return;
+    }
+    unsafe {
+        let mut cmd = Port::new(STATUS_PORT);
+        cmd.write(0x20u8);
+    }
+    let mut config = read_data().unwrap_or(0);
+    config |= 0x01;
+    config &= !0x20;
+    if !wait_input_empty() {
+        return;
+    }
+    unsafe {
+        let mut cmd = Port::new(STATUS_PORT);
+        cmd.write(0x60u8);
+        let mut data = Port::new(DATA_PORT);
+        data.write(config);
+    }
+    if !wait_input_empty() {
+        return;
+    }
+    unsafe {
+        let mut cmd = Port::new(STATUS_PORT);
+        cmd.write(0xAEu8);
+    }
+    if !wait_input_empty() {
+        return;
+    }
+    unsafe {
+        let mut data = Port::new(DATA_PORT);
+        data.write(0xF4u8);
+    }
+    let _ = read_data();
+}
+
+fn flush_output() {
+    while keyboard_has_data() {
+        let _ = unsafe {
+            let mut data = Port::new(DATA_PORT);
+            data.read::<u8>()
+        };
+    }
+}
+
+fn read_data() -> Option<u8> {
+    if !wait_output_full() {
+        return None;
+    }
+    unsafe {
+        let mut data = Port::new(DATA_PORT);
+        Some(data.read())
+    }
+}
+
+fn wait_input_empty() -> bool {
+    for _ in 0..10000 {
+        let status = unsafe {
+            let mut port = Port::new(STATUS_PORT);
+            port.read::<u8>()
+        };
+        if status & 0x02 == 0 {
+            return true;
+        }
+    }
+    false
+}
+
+fn wait_output_full() -> bool {
+    for _ in 0..10000 {
+        let status = unsafe {
+            let mut port = Port::new(STATUS_PORT);
+            port.read::<u8>()
+        };
+        if status & 0x01 != 0 {
+            return true;
+        }
+    }
+    false
 }
 
 fn apply_scancode(scancode: u8, state: &mut KeyboardState) -> Option<u8> {

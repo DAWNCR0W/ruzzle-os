@@ -1,0 +1,17 @@
+[package]
+name = "user_ml_runtime"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+user_gpu_service = { path = "../user_gpu_service" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ml-runtime"
+path = "src/main.rs"
+test = false
+bench = false

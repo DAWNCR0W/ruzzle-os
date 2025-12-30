@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.shell@1"
+summary = "Interactive shell service for command input and routing."
+provides = ["ruzzle.shell"]
+requires_caps = ["EndpointCreate"]

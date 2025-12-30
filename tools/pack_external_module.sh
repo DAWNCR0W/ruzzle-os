@@ -39,4 +39,8 @@ fi
 mkdir -p "${ROOT_DIR}/modules"
 python3 "${ROOT_DIR}/tools/pack_module.py" "${OUT_PATH}" "${MODULE_TOML}" "${ELF_BIN}"
 
+python3 "${ROOT_DIR}/tools/market_scan.py" \
+  --input "${ROOT_DIR}/modules" \
+  --output "${ROOT_DIR}/modules/index.toml"
+
 echo "Packed module bundle: ${OUT_PATH}"

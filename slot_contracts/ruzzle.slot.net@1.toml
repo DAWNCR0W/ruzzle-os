@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.net@1"
+summary = "Network configuration and interface management service."
+provides = ["ruzzle.net"]
+requires_caps = []

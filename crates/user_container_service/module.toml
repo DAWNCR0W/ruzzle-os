@@ -1,0 +1,6 @@
+name = "docker-service"
+version = "0.1.0"
+provides = ["ruzzle.container", "ruzzle.docker"]
+slots = ["ruzzle.slot.container@1"]
+requires_caps = ["ProcessSpawn"]
+depends = []

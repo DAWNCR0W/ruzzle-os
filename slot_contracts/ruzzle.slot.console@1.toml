@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.console@1"
+summary = "Console output service for logs and diagnostics."
+provides = ["ruzzle.console"]
+requires_caps = ["ConsoleWrite", "EndpointCreate"]

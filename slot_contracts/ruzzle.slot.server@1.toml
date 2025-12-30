@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.server@1"
+summary = "Server stack orchestration (HTTP/TLS/metrics) module."
+provides = ["ruzzle.server"]
+requires_caps = []

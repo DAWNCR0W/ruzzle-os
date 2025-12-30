@@ -33,6 +33,14 @@ user_sysinfo_service/         # system status text
 user_file_manager/            # ls/cd/mkdir/rm helpers
 user_text_editor/             # simple text editing
 user_puzzle_board/            # slot registry
+user_rust_toolchain/          # host toolchain metadata + build plans
+user_container_service/       # Docker-style container lifecycle
+user_server_stack/            # HTTP/TLS/metrics orchestration
+user_net_manager/             # network profiles/policies
+user_device_manager/          # device inventory + driver bindings
+user_input_service/           # USB/virtio/PS2 input aggregation
+user_gpu_service/             # GPU compute primitives
+user_ml_runtime/              # ML inference runtime
 
 
 tools/
@@ -43,17 +51,24 @@ run_qemu_arm.sh
 mk_initramfs.py
 doctor.sh
 module_lint.py
+slot_lint.py
+market_scan.py
+generate_slot_docs.py
 pack_external_module.sh
 pack_module.py
 new_piece.sh
+rpiece_build.sh
 
 modules/
   README.md
+
+slot_contracts/
 
 
 docs/
 spec.md
 implementation.md
+slot_contracts.md
 protocols.md
 
 ```
@@ -99,7 +114,8 @@ The AArch64 kernel uses a minimal `-kernel` + DTB boot path:
   - `/chosen` `linux,initrd-start/end`
 
 This is enough to build a BootInfo and load the initramfs on QEMU `virt`.
-UEFI boot is planned next (see `docs/boot.md`).
+UEFI boot for x86_64 is supported via Limine hybrid ISO; AArch64 UEFI remains planned
+(see `docs/boot.md`).
 
 ---
 
@@ -116,6 +132,7 @@ pub struct BootInfo<'a> {
     pub kernel_end: PhysAddr,
     pub initramfs: Option<(PhysAddr, PhysAddr)>,
     pub dtb_ptr: Option<PhysAddr>,
+    pub framebuffer: Option<FramebufferInfo>,
 }
 ```
 
@@ -137,15 +154,18 @@ pub enum MemoryKind {
 }
 ```
 
-### 3.3 UEFI BootInfo (planned)
+### 3.3 UEFI BootInfo (x86_64 active, AArch64 planned)
 
-UEFI boot will mirror the DTB contract by constructing a `BootInfo` from the UEFI
-memory map and initramfs on the EFI System Partition:
+The x86_64 hybrid ISO already uses Limine UEFI to populate `BootInfo` (including
+framebuffer details). The AArch64 UEFI flow will mirror the DTB contract by
+constructing a `BootInfo` from the UEFI memory map and initramfs on the EFI
+System Partition:
 
 - Iterate `EFI_MEMORY_DESCRIPTOR` entries and keep usable ranges.
 - Convert them into `MemoryRegion { start, end, kind: Usable }`.
 - Load `initramfs.img` into memory and pass `(start, end)`.
 - Set `dtb_ptr` to `None` (DTB optional in UEFI flow).
+- Populate the optional `framebuffer` field when GOP is available.
 
 ---
 
@@ -400,11 +420,12 @@ Receiver obtains it with the next `recv`.
 Modules declare which slots they fill via `module.toml`:
 
 ```toml
-slots = ["ruzzle.slot.console"]
+slots = ["ruzzle.slot.console@1"]
 ```
 
 Slots are the “tabs” that make module compatibility visible.
-The shell exposes `slots`, `plug`, and `unplug` commands to manage the board.
+The shell exposes `slots`, `plug` (with optional `--dry-run`), `unplug`, and `graph`
+commands to manage the board and dependencies.
 
 ### 14.2 Board behavior
 The puzzle board tracks:
@@ -434,6 +455,18 @@ A running module with matching slots automatically fills the board.
 4. set entry point
 5. setup user stack
 6. mark process runnable
+
+### 15.3 Module bundle format (`.rpiece`)
+
+Bundles are signed for the local marketplace.
+
+```
+RMOD | version(u16) | manifest_len(u32) | payload_len(u32) | manifest | payload | signature(32)
+```
+
+* version `2` uses HMAC-SHA256 over `manifest || payload`
+* version `1` is unsigned (legacy; shown as unsigned in the catalog)
+* the signing key defaults to `ruzzle-dev-key` and can be overridden when packing
 
 ---
 
@@ -501,7 +534,8 @@ with module versions bundled for future swap-in.
   * `pwd` / `ls [path]` / `cd <path>`
   * `mkdir <path>` / `touch <path>` / `rm <path>`
   * `cat <path>` / `write <path> <text>`
-  * `slots` / `plug <slot> <module>` / `unplug <slot>`
+  * `slots` / `plug [--dry-run|-n] <slot> <module>` / `unplug <slot>`
+  * `graph`
   * `sysinfo`
 
 ---

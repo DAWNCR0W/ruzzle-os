@@ -15,6 +15,9 @@ use platform_qemu_aarch64_virt as platform;
 
 pub mod boot;
 pub mod console;
+mod framebuffer;
+mod font;
+mod smp;
 pub mod allocator;
 pub mod init;
 pub mod shell;
@@ -23,7 +26,7 @@ use kernel_core::BootInfo;
 
 /// Kernel entrypoint invoked by the bootloader.
 pub fn entry(boot_info: BootInfo) -> ! {
-    console::init();
+    console::init_framebuffer(boot_info.framebuffer);
     allocator::init_heap();
     kprintln!("Ruzzle OS: kernel entry");
     #[cfg(feature = "x86_64")]

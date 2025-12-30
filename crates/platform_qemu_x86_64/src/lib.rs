@@ -12,6 +12,7 @@ pub fn boot_info() -> BootInfo<'static> {
         kernel_end: 0,
         initramfs: None,
         dtb_ptr: None,
+        framebuffer: None,
     }
 }
 

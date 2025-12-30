@@ -1,6 +1,6 @@
 name = "tui-shell"
 version = "0.1.0"
 provides = ["ruzzle.shell"]
-slots = ["ruzzle.slot.shell"]
+slots = ["ruzzle.slot.shell@1"]
 requires_caps = ["EndpointCreate"]
 depends = ["console-service"]
