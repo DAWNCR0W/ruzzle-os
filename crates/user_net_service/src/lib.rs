@@ -15,6 +15,15 @@ pub enum NetError {
     InvalidAddress,
 }
 
+/// Errors for route table operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RouteError {
+    NotFound,
+    AlreadyExists,
+    InvalidDestination,
+    InvalidInterface,
+}
+
 /// Simple representation of a network interface.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetInterface {
@@ -23,10 +32,18 @@ pub struct NetInterface {
     pub ipv4: Option<String>,
 }
 
+/// Simple route table entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteEntry {
+    pub destination: String,
+    pub iface: String,
+}
+
 /// In-memory network configuration manager.
 #[derive(Debug, Default, Clone)]
 pub struct NetManager {
     interfaces: BTreeMap<String, NetInterface>,
+    routes: BTreeMap<String, RouteEntry>,
 }
 
 impl NetManager {
@@ -34,6 +51,7 @@ impl NetManager {
     pub fn new() -> Self {
         Self {
             interfaces: BTreeMap::new(),
+            routes: BTreeMap::new(),
         }
     }
 
@@ -90,6 +108,44 @@ impl NetManager {
     pub fn list(&self) -> Vec<NetInterface> {
         self.interfaces.values().cloned().collect()
     }
+
+    /// Adds a route entry.
+    pub fn add_route(&mut self, destination: &str, iface: &str) -> Result<(), RouteError> {
+        if !is_valid_route_destination(destination) {
+            return Err(RouteError::InvalidDestination);
+        }
+        if !is_valid_iface_name(iface) {
+            return Err(RouteError::InvalidInterface);
+        }
+        if self.routes.contains_key(destination) {
+            return Err(RouteError::AlreadyExists);
+        }
+        self.routes.insert(
+            destination.to_string(),
+            RouteEntry {
+                destination: destination.to_string(),
+                iface: iface.to_string(),
+            },
+        );
+        Ok(())
+    }
+
+    /// Removes a route entry.
+    pub fn remove_route(&mut self, destination: &str) -> Result<(), RouteError> {
+        if !is_valid_route_destination(destination) {
+            return Err(RouteError::InvalidDestination);
+        }
+        if self.routes.remove(destination).is_some() {
+            Ok(())
+        } else {
+            Err(RouteError::NotFound)
+        }
+    }
+
+    /// Lists route entries sorted by destination.
+    pub fn list_routes(&self) -> Vec<RouteEntry> {
+        self.routes.values().cloned().collect()
+    }
 }
 
 fn is_valid_iface_name(name: &str) -> bool {
@@ -119,6 +175,23 @@ fn is_valid_ipv4(addr: &str) -> bool {
         }
     }
     true
+}
+
+fn is_valid_route_destination(dest: &str) -> bool {
+    if dest == "default" {
+        return true;
+    }
+    let (ip, mask) = match dest.split_once('/') {
+        Some(parts) => parts,
+        None => return false,
+    };
+    if !is_valid_ipv4(ip) {
+        return false;
+    }
+    let Ok(mask) = mask.parse::<u8>() else {
+        return false;
+    };
+    mask <= 32
 }
 
 #[cfg(test)]
@@ -217,6 +290,77 @@ mod tests {
         assert_eq!(
             manager.set_ipv4("eth0", Some("10.0.0.1")),
             Err(NetError::NotFound)
+        );
+    }
+
+    #[test]
+    fn add_and_list_routes() {
+        let mut manager = NetManager::new();
+        manager.add_route("default", "eth0").unwrap();
+        manager.add_route("10.0.0.0/24", "eth1").unwrap();
+        let routes = manager.list_routes();
+        assert_eq!(routes.len(), 2);
+        assert_eq!(routes[0].destination, "10.0.0.0/24");
+        assert_eq!(routes[1].destination, "default");
+    }
+
+    #[test]
+    fn add_route_rejects_invalid_destination() {
+        let mut manager = NetManager::new();
+        assert_eq!(
+            manager.add_route("10.0.0.0", "eth0"),
+            Err(RouteError::InvalidDestination)
+        );
+        assert_eq!(
+            manager.add_route("10.0.0.0/33", "eth0"),
+            Err(RouteError::InvalidDestination)
+        );
+        assert_eq!(
+            manager.add_route("300.0.0.0/24", "eth0"),
+            Err(RouteError::InvalidDestination)
+        );
+        assert_eq!(
+            manager.add_route("10.0.0.0/ab", "eth0"),
+            Err(RouteError::InvalidDestination)
+        );
+    }
+
+    #[test]
+    fn add_route_rejects_invalid_interface() {
+        let mut manager = NetManager::new();
+        assert_eq!(
+            manager.add_route("default", "Eth0"),
+            Err(RouteError::InvalidInterface)
+        );
+    }
+
+    #[test]
+    fn add_route_rejects_duplicates() {
+        let mut manager = NetManager::new();
+        manager.add_route("default", "eth0").unwrap();
+        assert_eq!(
+            manager.add_route("default", "eth1"),
+            Err(RouteError::AlreadyExists)
+        );
+    }
+
+    #[test]
+    fn remove_route_roundtrip() {
+        let mut manager = NetManager::new();
+        manager.add_route("default", "eth0").unwrap();
+        assert_eq!(manager.remove_route("default"), Ok(()));
+        assert_eq!(
+            manager.remove_route("default"),
+            Err(RouteError::NotFound)
+        );
+    }
+
+    #[test]
+    fn remove_route_rejects_invalid_destination() {
+        let mut manager = NetManager::new();
+        assert_eq!(
+            manager.remove_route("bad"),
+            Err(RouteError::InvalidDestination)
         );
     }
 }

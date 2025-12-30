@@ -18,6 +18,14 @@ pub enum FsError {
     InvalidUtf8,
 }
 
+/// Filesystem usage statistics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FsStats {
+    pub files: usize,
+    pub dirs: usize,
+    pub bytes: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Node {
     File(Vec<u8>),
@@ -101,6 +109,46 @@ impl FileSystem {
         Ok(dir.keys().cloned().collect())
     }
 
+    /// Returns usage stats for the entire filesystem.
+    pub fn stats(&self) -> FsStats {
+        let mut stats = FsStats {
+            files: 0,
+            dirs: 0,
+            bytes: 0,
+        };
+        count_dir(&self.root, &mut stats);
+        stats
+    }
+
+    /// Returns usage stats for a specific path.
+    pub fn stats_for(&self, path: &str) -> Result<FsStats, FsError> {
+        let parts = split_path(path)?;
+        if parts.is_empty() {
+            return Ok(self.stats());
+        }
+        let node = self.walk_node(&parts)?;
+        let mut stats = FsStats {
+            files: 0,
+            dirs: 0,
+            bytes: 0,
+        };
+        match node {
+            Node::File(data) => {
+                stats.files = 1;
+                stats.bytes = data.len();
+            }
+            Node::Dir(children) => {
+                count_dir(children, &mut stats);
+            }
+        }
+        Ok(stats)
+    }
+
+    /// Returns the total byte size for a file or directory tree.
+    pub fn size_of(&self, path: &str) -> Result<usize, FsError> {
+        Ok(self.stats_for(path)?.bytes)
+    }
+
     /// Removes a file or an empty directory.
     pub fn remove(&mut self, path: &str) -> Result<(), FsError> {
         let parts = split_path(path)?;
@@ -177,6 +225,19 @@ fn split_path(path: &str) -> Result<Vec<&str>, FsError> {
     Ok(parts)
 }
 
+fn count_dir(children: &BTreeMap<String, Node>, stats: &mut FsStats) {
+    stats.dirs += 1;
+    for node in children.values() {
+        match node {
+            Node::File(data) => {
+                stats.files += 1;
+                stats.bytes += data.len();
+            }
+            Node::Dir(grandchildren) => count_dir(grandchildren, stats),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,6 +267,16 @@ mod tests {
     }
 
     #[test]
+    fn list_dir_on_subdirectory() {
+        let mut fs = FileSystem::new();
+        fs.mkdir("/etc").unwrap();
+        fs.write_file("/etc/hosts", b"127.0.0.1").unwrap();
+        fs.mkdir("/etc/conf").unwrap();
+        let list = fs.list_dir("/etc").unwrap();
+        assert_eq!(list, vec!["conf".to_string(), "hosts".to_string()]);
+    }
+
+    #[test]
     fn mkdir_rejects_existing() {
         let mut fs = FileSystem::new();
         fs.mkdir("/tmp").unwrap();
@@ -228,6 +299,60 @@ mod tests {
     fn mkdir_requires_parent() {
         let mut fs = FileSystem::new();
         assert_eq!(fs.mkdir("/a/b"), Err(FsError::NotFound));
+    }
+
+    #[test]
+    fn stats_empty_fs_counts_root_dir() {
+        let fs = FileSystem::new();
+        let stats = fs.stats();
+        assert_eq!(stats.files, 0);
+        assert_eq!(stats.dirs, 1);
+        assert_eq!(stats.bytes, 0);
+    }
+
+    #[test]
+    fn stats_counts_nested_entries() {
+        let mut fs = FileSystem::new();
+        fs.mkdir("/etc").unwrap();
+        fs.mkdir("/var").unwrap();
+        fs.write_file("/etc/hosts", b"abc").unwrap();
+        fs.write_file("/var/log", b"xy").unwrap();
+        let stats = fs.stats();
+        assert_eq!(stats.files, 2);
+        assert_eq!(stats.dirs, 3);
+        assert_eq!(stats.bytes, 5);
+    }
+
+    #[test]
+    fn stats_for_file_and_dir() {
+        let mut fs = FileSystem::new();
+        fs.mkdir("/etc").unwrap();
+        fs.write_file("/etc/hosts", b"abc").unwrap();
+        let file_stats = fs.stats_for("/etc/hosts").unwrap();
+        assert_eq!(file_stats.files, 1);
+        assert_eq!(file_stats.dirs, 0);
+        assert_eq!(file_stats.bytes, 3);
+        let dir_stats = fs.stats_for("/etc").unwrap();
+        assert_eq!(dir_stats.files, 1);
+        assert_eq!(dir_stats.dirs, 1);
+        assert_eq!(dir_stats.bytes, 3);
+    }
+
+    #[test]
+    fn stats_for_rejects_invalid_path_syntax() {
+        let fs = FileSystem::new();
+        assert_eq!(fs.stats_for("bad//path"), Err(FsError::InvalidPath));
+    }
+
+    #[test]
+    fn size_of_handles_root_and_missing() {
+        let mut fs = FileSystem::new();
+        fs.mkdir("/etc").unwrap();
+        fs.write_file("/etc/hosts", b"abc").unwrap();
+        assert_eq!(fs.size_of("/").unwrap(), 3);
+        assert_eq!(fs.size_of("/etc").unwrap(), 3);
+        assert_eq!(fs.size_of("/etc/hosts").unwrap(), 3);
+        assert_eq!(fs.size_of("/missing"), Err(FsError::NotFound));
     }
 
     #[test]
@@ -300,6 +425,12 @@ mod tests {
         fs.mkdir("/etc").unwrap();
         fs.write_file("/etc/hosts", b"x").unwrap();
         assert_eq!(fs.list_dir("/etc/hosts"), Err(FsError::NotDir));
+    }
+
+    #[test]
+    fn list_dir_rejects_missing() {
+        let fs = FileSystem::new();
+        assert_eq!(fs.list_dir("/missing"), Err(FsError::NotFound));
     }
 
     #[test]

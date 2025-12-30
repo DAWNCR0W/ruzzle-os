@@ -10,13 +10,25 @@ use ruzzle_protocol::shell as shell_protocol;
 /// Commands supported by the TUI shell.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    Ps,
+    Ps {
+        tree: bool,
+    },
     Lsmod,
     Start(String),
     Stop(String),
     LogTail,
     Help(Option<String>),
-    Catalog,
+    Catalog {
+        slot: Option<String>,
+        verified_only: bool,
+    },
+    PieceCheck(String),
+    Ip(Option<String>),
+    Route(Option<String>),
+    Mount(Option<String>),
+    Df(Option<String>),
+    Du(String),
+    MarketScan,
     Install(String),
     Remove(String),
     Setup,
@@ -39,8 +51,14 @@ pub enum Command {
     Rm(String),
     RmRecursive(String),
     Slots,
-    Plug { slot: String, module: String },
+    Plug {
+        slot: String,
+        module: String,
+        dry_run: bool,
+        swap: bool,
+    },
     Unplug(String),
+    Graph,
     Sysinfo,
     Unknown(String),
 }
@@ -69,6 +87,14 @@ pub struct SlotRow {
     pub provider: Option<String>,
 }
 
+/// Lightweight dependency graph row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphRow {
+    pub name: String,
+    pub state: String,
+    pub depends: Vec<String>,
+}
+
 /// Parses a shell command string into a structured command.
 pub fn parse_command(input: &str) -> Command {
     let trimmed = input.trim();
@@ -77,13 +103,16 @@ pub fn parse_command(input: &str) -> Command {
     }
 
     if trimmed == "ps" {
-        return Command::Ps;
+        return Command::Ps { tree: false };
     }
     if trimmed == "lsmod" {
         return Command::Lsmod;
     }
     if trimmed == "catalog" {
-        return Command::Catalog;
+        return Command::Catalog {
+            slot: None,
+            verified_only: false,
+        };
     }
     if trimmed == "setup" {
         return Command::Setup;
@@ -103,6 +132,9 @@ pub fn parse_command(input: &str) -> Command {
     if trimmed == "slots" {
         return Command::Slots;
     }
+    if trimmed == "graph" {
+        return Command::Graph;
+    }
     if trimmed == "sysinfo" {
         return Command::Sysinfo;
     }
@@ -121,6 +153,79 @@ pub fn parse_command(input: &str) -> Command {
     let cmd = parts.next().unwrap();
 
     match cmd {
+        "catalog" => parse_catalog_args(parts, trimmed),
+        "market" => {
+            let sub = parts.next().unwrap_or("");
+            let extra = parts.next().is_some();
+            if sub == "scan" && !extra {
+                Command::MarketScan
+            } else {
+                Command::Unknown(trimmed.to_string())
+            }
+        }
+        "piece" => {
+            let sub = parts.next().unwrap_or("");
+            if sub != "check" {
+                return Command::Unknown(trimmed.to_string());
+            }
+            let name = parts.collect::<Vec<&str>>().join(" ");
+            if name.is_empty() {
+                Command::Unknown(trimmed.to_string())
+            } else {
+                Command::PieceCheck(name)
+            }
+        }
+        "ps" => {
+            let mut tree = false;
+            for part in parts {
+                if part == "--tree" {
+                    tree = true;
+                } else {
+                    return Command::Unknown(trimmed.to_string());
+                }
+            }
+            Command::Ps { tree }
+        }
+        "ip" => {
+            let args = parts.collect::<Vec<&str>>().join(" ");
+            if args.is_empty() {
+                Command::Ip(None)
+            } else {
+                Command::Ip(Some(args))
+            }
+        }
+        "route" => {
+            let args = parts.collect::<Vec<&str>>().join(" ");
+            if args.is_empty() {
+                Command::Route(None)
+            } else {
+                Command::Route(Some(args))
+            }
+        }
+        "mount" => {
+            let args = parts.collect::<Vec<&str>>().join(" ");
+            if args.is_empty() {
+                Command::Mount(None)
+            } else {
+                Command::Mount(Some(args))
+            }
+        }
+        "df" => {
+            let path = parts.collect::<Vec<&str>>().join(" ");
+            if path.is_empty() {
+                Command::Df(None)
+            } else {
+                Command::Df(Some(path))
+            }
+        }
+        "du" => {
+            let path = parts.collect::<Vec<&str>>().join(" ");
+            if path.is_empty() {
+                Command::Unknown(trimmed.to_string())
+            } else {
+                Command::Du(path)
+            }
+        }
         "start" => {
             let module = parts.collect::<Vec<&str>>().join(" ");
             if module.is_empty() {
@@ -252,14 +357,34 @@ pub fn parse_command(input: &str) -> Command {
             }
         }
         "plug" => {
-            let slot = parts.next().unwrap_or("");
-            let module = parts.collect::<Vec<&str>>().join(" ");
+            let mut dry_run = false;
+            let mut swap = false;
+            let mut args = Vec::new();
+            for part in parts {
+                if part == "--dry-run" || part == "-n" {
+                    dry_run = true;
+                } else if part == "--swap" || part == "-s" {
+                    swap = true;
+                } else if part.starts_with('-') {
+                    return Command::Unknown(trimmed.to_string());
+                } else {
+                    args.push(part);
+                }
+            }
+            let slot = args.first().copied().unwrap_or("");
+            let module = if args.len() > 1 {
+                args[1..].join(" ")
+            } else {
+                String::new()
+            };
             if slot.is_empty() || module.is_empty() {
                 Command::Unknown(trimmed.to_string())
             } else {
                 Command::Plug {
                     slot: slot.to_string(),
                     module,
+                    dry_run,
+                    swap,
                 }
             }
         }
@@ -323,16 +448,53 @@ pub fn parse_command(input: &str) -> Command {
     }
 }
 
+fn parse_catalog_args<'a>(mut parts: impl Iterator<Item = &'a str>, raw: &str) -> Command {
+    let mut slot: Option<String> = None;
+    let mut verified_only = false;
+    while let Some(part) = parts.next() {
+        match part {
+            "--verified" => verified_only = true,
+            "--slot" => {
+                let value = parts.next().unwrap_or("");
+                if value.is_empty() || slot.is_some() {
+                    return Command::Unknown(raw.to_string());
+                }
+                slot = Some(value.to_string());
+            }
+            _ => return Command::Unknown(raw.to_string()),
+        }
+    }
+    Command::Catalog {
+        slot,
+        verified_only,
+    }
+}
+
 /// Converts a parsed command into the IPC wire representation.
 pub fn to_ipc(command: &Command) -> Option<shell_protocol::ShellCommand> {
     match command {
-        Command::Ps => Some(shell_protocol::ShellCommand::Ps),
+        Command::Ps { tree } => Some(shell_protocol::ShellCommand::Ps { tree: *tree }),
         Command::Lsmod => Some(shell_protocol::ShellCommand::Lsmod),
         Command::Start(name) => Some(shell_protocol::ShellCommand::Start(name.clone())),
         Command::Stop(name) => Some(shell_protocol::ShellCommand::Stop(name.clone())),
         Command::LogTail => Some(shell_protocol::ShellCommand::LogTail),
         Command::Help(topic) => Some(shell_protocol::ShellCommand::Help(topic.clone())),
-        Command::Catalog => Some(shell_protocol::ShellCommand::Catalog),
+        Command::Catalog {
+            slot,
+            verified_only,
+        } => Some(shell_protocol::ShellCommand::Catalog {
+            slot: slot.clone(),
+            verified_only: *verified_only,
+        }),
+        Command::PieceCheck(name) => {
+            Some(shell_protocol::ShellCommand::PieceCheck(name.clone()))
+        }
+        Command::Ip(args) => Some(shell_protocol::ShellCommand::Ip(args.clone())),
+        Command::Route(args) => Some(shell_protocol::ShellCommand::Route(args.clone())),
+        Command::Mount(args) => Some(shell_protocol::ShellCommand::Mount(args.clone())),
+        Command::Df(path) => Some(shell_protocol::ShellCommand::Df(path.clone())),
+        Command::Du(path) => Some(shell_protocol::ShellCommand::Du(path.clone())),
+        Command::MarketScan => Some(shell_protocol::ShellCommand::MarketScan),
         Command::Install(name) => Some(shell_protocol::ShellCommand::Install(name.clone())),
         Command::Remove(name) => Some(shell_protocol::ShellCommand::Remove(name.clone())),
         Command::Setup => Some(shell_protocol::ShellCommand::Setup),
@@ -365,11 +527,19 @@ pub fn to_ipc(command: &Command) -> Option<shell_protocol::ShellCommand> {
         Command::Rm(path) => Some(shell_protocol::ShellCommand::Rm(path.clone())),
         Command::RmRecursive(path) => Some(shell_protocol::ShellCommand::RmRecursive(path.clone())),
         Command::Slots => Some(shell_protocol::ShellCommand::Slots),
-        Command::Plug { slot, module } => Some(shell_protocol::ShellCommand::Plug {
+        Command::Plug {
+            slot,
+            module,
+            dry_run,
+            swap,
+        } => Some(shell_protocol::ShellCommand::Plug {
             slot: slot.clone(),
             module: module.clone(),
+            dry_run: *dry_run,
+            swap: *swap,
         }),
         Command::Unplug(slot) => Some(shell_protocol::ShellCommand::Unplug(slot.clone())),
+        Command::Graph => Some(shell_protocol::ShellCommand::Graph),
         Command::Sysinfo => Some(shell_protocol::ShellCommand::Sysinfo),
         Command::Unknown(_) => None,
     }
@@ -378,13 +548,26 @@ pub fn to_ipc(command: &Command) -> Option<shell_protocol::ShellCommand> {
 /// Converts an IPC command back into the local command enum.
 pub fn from_ipc(command: shell_protocol::ShellCommand) -> Command {
     match command {
-        shell_protocol::ShellCommand::Ps => Command::Ps,
+        shell_protocol::ShellCommand::Ps { tree } => Command::Ps { tree },
         shell_protocol::ShellCommand::Lsmod => Command::Lsmod,
         shell_protocol::ShellCommand::Start(name) => Command::Start(name),
         shell_protocol::ShellCommand::Stop(name) => Command::Stop(name),
         shell_protocol::ShellCommand::LogTail => Command::LogTail,
         shell_protocol::ShellCommand::Help(topic) => Command::Help(topic),
-        shell_protocol::ShellCommand::Catalog => Command::Catalog,
+        shell_protocol::ShellCommand::Catalog {
+            slot,
+            verified_only,
+        } => Command::Catalog {
+            slot,
+            verified_only,
+        },
+        shell_protocol::ShellCommand::PieceCheck(name) => Command::PieceCheck(name),
+        shell_protocol::ShellCommand::Ip(args) => Command::Ip(args),
+        shell_protocol::ShellCommand::Route(args) => Command::Route(args),
+        shell_protocol::ShellCommand::Mount(args) => Command::Mount(args),
+        shell_protocol::ShellCommand::Df(path) => Command::Df(path),
+        shell_protocol::ShellCommand::Du(path) => Command::Du(path),
+        shell_protocol::ShellCommand::MarketScan => Command::MarketScan,
         shell_protocol::ShellCommand::Install(name) => Command::Install(name),
         shell_protocol::ShellCommand::Remove(name) => Command::Remove(name),
         shell_protocol::ShellCommand::Setup => Command::Setup,
@@ -411,21 +594,55 @@ pub fn from_ipc(command: shell_protocol::ShellCommand) -> Command {
         shell_protocol::ShellCommand::Rm(path) => Command::Rm(path),
         shell_protocol::ShellCommand::RmRecursive(path) => Command::RmRecursive(path),
         shell_protocol::ShellCommand::Slots => Command::Slots,
-        shell_protocol::ShellCommand::Plug { slot, module } => Command::Plug { slot, module },
+        shell_protocol::ShellCommand::Plug {
+            slot,
+            module,
+            dry_run,
+            swap,
+        } => Command::Plug {
+            slot,
+            module,
+            dry_run,
+            swap,
+        },
         shell_protocol::ShellCommand::Unplug(slot) => Command::Unplug(slot),
+        shell_protocol::ShellCommand::Graph => Command::Graph,
         shell_protocol::ShellCommand::Sysinfo => Command::Sysinfo,
     }
 }
 
 /// Formats the help text shown by the shell.
-pub fn format_help() -> String {
+pub fn format_help(topic: Option<&str>) -> String {
+    match topic.map(str::trim) {
+        None | Some("") => format_help_all(),
+        Some("slot") | Some("slots") => format_help_slot(),
+        Some("market") => format_help_market(),
+        Some(other) => {
+            let mut out = String::new();
+            out.push_str("unknown help topic: ");
+            out.push_str(other);
+            out.push('\n');
+            out.push_str(&format_help_all());
+            out
+        }
+    }
+}
+
+fn format_help_all() -> String {
     let mut out = String::new();
     out.push_str("commands:\n");
-    out.push_str("  ps\n");
+    out.push_str("  ps [--tree]\n");
     out.push_str("  lsmod\n");
     out.push_str("  start <module>\n");
     out.push_str("  stop <module>\n");
-    out.push_str("  catalog\n");
+    out.push_str("  catalog [--slot <slot>@<ver>] [--verified]\n");
+    out.push_str("  piece check <name>\n");
+    out.push_str("  ip [args]\n");
+    out.push_str("  route [args]\n");
+    out.push_str("  mount [args]\n");
+    out.push_str("  df [path]\n");
+    out.push_str("  du <path>\n");
+    out.push_str("  market scan\n");
     out.push_str("  install <module>\n");
     out.push_str("  remove <module>\n");
     out.push_str("  setup\n");
@@ -450,11 +667,35 @@ pub fn format_help() -> String {
     out.push_str("  rm <path>\n");
     out.push_str("  rm -r <path>\n");
     out.push_str("  slots\n");
-    out.push_str("  plug <slot> <module>\n");
+    out.push_str("  plug [--dry-run|-n] [--swap|-s] <slot> <module>\n");
     out.push_str("  unplug <slot>\n");
+    out.push_str("  graph\n");
     out.push_str("  sysinfo\n");
     out.push_str("  log tail\n");
     out.push_str("  help [command]\n");
+    out.push_str("  help slot | help market\n");
+    out
+}
+
+fn format_help_slot() -> String {
+    let mut out = String::new();
+    out.push_str("slot help:\n");
+    out.push_str("  slots\n");
+    out.push_str("  plug [--dry-run|-n] [--swap|-s] <slot> <module>\n");
+    out.push_str("  unplug <slot>\n");
+    out.push_str("  graph\n");
+    out.push_str("  piece check <name>\n");
+    out
+}
+
+fn format_help_market() -> String {
+    let mut out = String::new();
+    out.push_str("market help:\n");
+    out.push_str("  catalog [--slot <slot>@<ver>] [--verified]\n");
+    out.push_str("  market scan\n");
+    out.push_str("  install <module>\n");
+    out.push_str("  remove <module>\n");
+    out.push_str("  piece check <name>\n");
     out
 }
 
@@ -470,6 +711,9 @@ pub fn format_catalog(rows: &[ModuleRow]) -> String {
         let provides = join_list(&row.provides);
         out.push_str("  ");
         out.push_str(&row.name);
+        out.push_str(" [");
+        out.push_str(&row.state);
+        out.push_str("]");
         out.push_str(" provides: ");
         out.push_str(&provides);
         out.push('\n');
@@ -480,22 +724,96 @@ pub fn format_catalog(rows: &[ModuleRow]) -> String {
 /// Formats the puzzle slot board.
 pub fn format_slots(rows: &[SlotRow]) -> String {
     let mut out = String::new();
-    out.push_str("slots:\n");
+    out.push_str("puzzle board:\n");
+    if rows.is_empty() {
+        out.push_str("  <none>\n");
+        return out;
+    }
+    let mut required = Vec::new();
+    let mut optional = Vec::new();
+    for row in rows {
+        if row.required {
+            required.push(row.clone());
+        } else {
+            optional.push(row.clone());
+        }
+    }
+    out.push_str(&format_slot_group("REQUIRED", &required));
+    out.push_str(&format_slot_group("OPTIONAL", &optional));
+    out
+}
+
+fn format_slot_group(label: &str, rows: &[SlotRow]) -> String {
+    if rows.is_empty() {
+        let mut out = String::new();
+        out.push_str("  ");
+        out.push_str(label);
+        out.push_str(": <none>\n");
+        return out;
+    }
+    let mut lines = Vec::new();
+    lines.push(label.to_string());
+    for row in rows {
+        let status = if row.provider.is_some() { "OK " } else { "EMPTY" };
+        let provider = row.provider.as_deref().unwrap_or("<empty>");
+        let mut line = String::new();
+        line.push('[');
+        line.push_str(status);
+        line.push_str("] ");
+        line.push_str(&row.name);
+        line.push_str(" -> ");
+        line.push_str(provider);
+        lines.push(line);
+    }
+    let width = lines.iter().map(|line| line.len()).max().unwrap_or(0);
+    let mut out = String::new();
+    out.push_str("  +");
+    out.push_str(&"-".repeat(width + 2));
+    out.push_str("+\n");
+    for line in lines {
+        out.push_str("  | ");
+        out.push_str(&line);
+        if line.len() < width {
+            out.push_str(&" ".repeat(width - line.len()));
+        }
+        out.push_str(" |\n");
+    }
+    out.push_str("  +");
+    out.push_str(&"-".repeat(width + 2));
+    out.push_str("+\n");
+    out
+}
+
+/// Formats a dependency graph view.
+pub fn format_graph(rows: &[GraphRow]) -> String {
+    let mut out = String::new();
+    out.push_str("puzzle graph:\n");
     if rows.is_empty() {
         out.push_str("  <none>\n");
         return out;
     }
     for row in rows {
-        out.push_str("  ");
+        out.push_str("  +-[");
+        out.push_str(&row.state);
+        out.push_str("] ");
         out.push_str(&row.name);
-        out.push_str(" [");
-        out.push_str(if row.required { "required" } else { "optional" });
-        out.push_str("] -> ");
-        match &row.provider {
-            Some(provider) => out.push_str(provider),
-            None => out.push_str("<empty>"),
-        }
         out.push('\n');
+        if row.depends.is_empty() {
+            out.push_str("     `- <none>\n");
+        } else {
+            for (index, dep) in row.depends.iter().enumerate() {
+                let branch = if index + 1 == row.depends.len() {
+                    "`-"
+                } else {
+                    "|-"
+                };
+                out.push_str("     ");
+                out.push_str(branch);
+                out.push(' ');
+                out.push_str(dep);
+                out.push('\n');
+            }
+        }
     }
     out
 }
@@ -577,15 +895,22 @@ mod tests {
 
     #[test]
     fn parse_simple_commands() {
-        assert_eq!(parse_command("ps"), Command::Ps);
+        assert_eq!(parse_command("ps"), Command::Ps { tree: false });
         assert_eq!(parse_command("lsmod"), Command::Lsmod);
-        assert_eq!(parse_command("catalog"), Command::Catalog);
+        assert_eq!(
+            parse_command("catalog"),
+            Command::Catalog {
+                slot: None,
+                verified_only: false
+            }
+        );
         assert_eq!(parse_command("setup"), Command::Setup);
         assert_eq!(parse_command("logout"), Command::Logout);
         assert_eq!(parse_command("whoami"), Command::Whoami);
         assert_eq!(parse_command("users"), Command::Users);
         assert_eq!(parse_command("pwd"), Command::Pwd);
         assert_eq!(parse_command("slots"), Command::Slots);
+        assert_eq!(parse_command("graph"), Command::Graph);
         assert_eq!(parse_command("sysinfo"), Command::Sysinfo);
         assert_eq!(parse_command("log tail"), Command::LogTail);
         assert_eq!(parse_command("help"), Command::Help(None));
@@ -620,6 +945,69 @@ mod tests {
         assert_eq!(
             parse_command("remove fs-service"),
             Command::Remove("fs-service".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_piece_check_command() {
+        assert_eq!(
+            parse_command("piece check fs-service"),
+            Command::PieceCheck("fs-service".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_system_tool_commands() {
+        assert_eq!(parse_command("ps --tree"), Command::Ps { tree: true });
+        assert_eq!(parse_command("ip"), Command::Ip(None));
+        assert_eq!(
+            parse_command("ip add eth0"),
+            Command::Ip(Some("add eth0".to_string()))
+        );
+        assert_eq!(parse_command("route"), Command::Route(None));
+        assert_eq!(
+            parse_command("route add default eth0"),
+            Command::Route(Some("add default eth0".to_string()))
+        );
+        assert_eq!(parse_command("mount"), Command::Mount(None));
+        assert_eq!(
+            parse_command("mount memfs /mnt"),
+            Command::Mount(Some("memfs /mnt".to_string()))
+        );
+        assert_eq!(parse_command("df"), Command::Df(None));
+        assert_eq!(
+            parse_command("df /"),
+            Command::Df(Some("/".to_string()))
+        );
+        assert_eq!(
+            parse_command("du /etc"),
+            Command::Du("/etc".to_string())
+        );
+        assert_eq!(parse_command("market scan"), Command::MarketScan);
+    }
+
+    #[test]
+    fn parse_catalog_filters() {
+        assert_eq!(
+            parse_command("catalog --verified"),
+            Command::Catalog {
+                slot: None,
+                verified_only: true
+            }
+        );
+        assert_eq!(
+            parse_command("catalog --slot ruzzle.slot.net@1"),
+            Command::Catalog {
+                slot: Some("ruzzle.slot.net@1".to_string()),
+                verified_only: false
+            }
+        );
+        assert_eq!(
+            parse_command("catalog --slot ruzzle.slot.net@1 --verified"),
+            Command::Catalog {
+                slot: Some("ruzzle.slot.net@1".to_string()),
+                verified_only: true
+            }
         );
     }
 
@@ -694,15 +1082,53 @@ mod tests {
             }
         );
         assert_eq!(
-            parse_command("plug ruzzle.slot.console console-service"),
+            parse_command("plug ruzzle.slot.console@1 console-service"),
             Command::Plug {
-                slot: "ruzzle.slot.console".to_string(),
-                module: "console-service".to_string()
+                slot: "ruzzle.slot.console@1".to_string(),
+                module: "console-service".to_string(),
+                dry_run: false,
+                swap: false
             }
         );
         assert_eq!(
-            parse_command("unplug ruzzle.slot.console"),
-            Command::Unplug("ruzzle.slot.console".to_string())
+            parse_command("plug --dry-run ruzzle.slot.console@1 console-service"),
+            Command::Plug {
+                slot: "ruzzle.slot.console@1".to_string(),
+                module: "console-service".to_string(),
+                dry_run: true,
+                swap: false
+            }
+        );
+        assert_eq!(
+            parse_command("plug -n ruzzle.slot.console@1 console-service"),
+            Command::Plug {
+                slot: "ruzzle.slot.console@1".to_string(),
+                module: "console-service".to_string(),
+                dry_run: true,
+                swap: false
+            }
+        );
+        assert_eq!(
+            parse_command("plug --swap ruzzle.slot.console@1 console-service"),
+            Command::Plug {
+                slot: "ruzzle.slot.console@1".to_string(),
+                module: "console-service".to_string(),
+                dry_run: false,
+                swap: true
+            }
+        );
+        assert_eq!(
+            parse_command("plug -n --swap ruzzle.slot.console@1 console-service"),
+            Command::Plug {
+                slot: "ruzzle.slot.console@1".to_string(),
+                module: "console-service".to_string(),
+                dry_run: true,
+                swap: true
+            }
+        );
+        assert_eq!(
+            parse_command("unplug ruzzle.slot.console@1"),
+            Command::Unplug("ruzzle.slot.console@1".to_string())
         );
     }
 
@@ -711,6 +1137,10 @@ mod tests {
         assert_eq!(parse_command(""), Command::Unknown("".to_string()));
         assert_eq!(parse_command("start"), Command::Unknown("start".to_string()));
         assert_eq!(parse_command("stop"), Command::Unknown("stop".to_string()));
+        assert_eq!(
+            parse_command("ps --bad"),
+            Command::Unknown("ps --bad".to_string())
+        );
         assert_eq!(parse_command("login"), Command::Unknown("login".to_string()));
         assert_eq!(parse_command("useradd"), Command::Unknown("useradd".to_string()));
         assert_eq!(parse_command("cd"), Command::Unknown("cd".to_string()));
@@ -730,9 +1160,36 @@ mod tests {
         assert_eq!(parse_command("write /etc/hostname"), Command::Unknown("write /etc/hostname".to_string()));
         assert_eq!(parse_command("plug"), Command::Unknown("plug".to_string()));
         assert_eq!(parse_command("plug slot"), Command::Unknown("plug slot".to_string()));
+        assert_eq!(
+            parse_command("plug --bad ruzzle.slot.console@1 console-service"),
+            Command::Unknown("plug --bad ruzzle.slot.console@1 console-service".to_string())
+        );
         assert_eq!(parse_command("unplug"), Command::Unknown("unplug".to_string()));
         assert_eq!(parse_command("install"), Command::Unknown("install".to_string()));
         assert_eq!(parse_command("remove"), Command::Unknown("remove".to_string()));
+        assert_eq!(parse_command("piece"), Command::Unknown("piece".to_string()));
+        assert_eq!(
+            parse_command("piece check"),
+            Command::Unknown("piece check".to_string())
+        );
+        assert_eq!(parse_command("du"), Command::Unknown("du".to_string()));
+        assert_eq!(parse_command("market"), Command::Unknown("market".to_string()));
+        assert_eq!(
+            parse_command("market foo"),
+            Command::Unknown("market foo".to_string())
+        );
+        assert_eq!(
+            parse_command("catalog --slot"),
+            Command::Unknown("catalog --slot".to_string())
+        );
+        assert_eq!(
+            parse_command("catalog --slot a --slot b"),
+            Command::Unknown("catalog --slot a --slot b".to_string())
+        );
+        assert_eq!(
+            parse_command("catalog --bad"),
+            Command::Unknown("catalog --bad".to_string())
+        );
         assert_eq!(parse_command("foo"), Command::Unknown("foo".to_string()));
     }
 
@@ -752,7 +1209,14 @@ mod tests {
 
     #[test]
     fn ipc_conversion_maps_all_commands() {
-        assert_eq!(to_ipc(&Command::Ps), Some(shell_protocol::ShellCommand::Ps));
+        assert_eq!(
+            to_ipc(&Command::Ps { tree: false }),
+            Some(shell_protocol::ShellCommand::Ps { tree: false })
+        );
+        assert_eq!(
+            to_ipc(&Command::Ps { tree: true }),
+            Some(shell_protocol::ShellCommand::Ps { tree: true })
+        );
         assert_eq!(
             to_ipc(&Command::Lsmod),
             Some(shell_protocol::ShellCommand::Lsmod)
@@ -770,8 +1234,42 @@ mod tests {
             Some(shell_protocol::ShellCommand::Help(None))
         );
         assert_eq!(
-            to_ipc(&Command::Catalog),
-            Some(shell_protocol::ShellCommand::Catalog)
+            to_ipc(&Command::Catalog {
+                slot: None,
+                verified_only: false
+            }),
+            Some(shell_protocol::ShellCommand::Catalog {
+                slot: None,
+                verified_only: false
+            })
+        );
+        assert_eq!(
+            to_ipc(&Command::PieceCheck("fs".to_string())),
+            Some(shell_protocol::ShellCommand::PieceCheck("fs".to_string()))
+        );
+        assert_eq!(
+            to_ipc(&Command::Ip(Some("add eth0".to_string()))),
+            Some(shell_protocol::ShellCommand::Ip(Some("add eth0".to_string())))
+        );
+        assert_eq!(
+            to_ipc(&Command::Route(None)),
+            Some(shell_protocol::ShellCommand::Route(None))
+        );
+        assert_eq!(
+            to_ipc(&Command::Mount(Some("memfs /mnt".to_string()))),
+            Some(shell_protocol::ShellCommand::Mount(Some("memfs /mnt".to_string())))
+        );
+        assert_eq!(
+            to_ipc(&Command::Df(Some("/".to_string()))),
+            Some(shell_protocol::ShellCommand::Df(Some("/".to_string())))
+        );
+        assert_eq!(
+            to_ipc(&Command::Du("/etc".to_string())),
+            Some(shell_protocol::ShellCommand::Du("/etc".to_string()))
+        );
+        assert_eq!(
+            to_ipc(&Command::MarketScan),
+            Some(shell_protocol::ShellCommand::MarketScan)
         );
         assert_eq!(
             to_ipc(&Command::Install("fs".to_string())),
@@ -883,19 +1381,27 @@ mod tests {
         );
         assert_eq!(
             to_ipc(&Command::Plug {
-                slot: "ruzzle.slot.console".to_string(),
-                module: "console-service".to_string()
+                slot: "ruzzle.slot.console@1".to_string(),
+                module: "console-service".to_string(),
+                dry_run: false,
+                swap: false
             }),
             Some(shell_protocol::ShellCommand::Plug {
-                slot: "ruzzle.slot.console".to_string(),
-                module: "console-service".to_string()
+                slot: "ruzzle.slot.console@1".to_string(),
+                module: "console-service".to_string(),
+                dry_run: false,
+                swap: false
             })
         );
         assert_eq!(
-            to_ipc(&Command::Unplug("ruzzle.slot.console".to_string())),
+            to_ipc(&Command::Unplug("ruzzle.slot.console@1".to_string())),
             Some(shell_protocol::ShellCommand::Unplug(
-                "ruzzle.slot.console".to_string()
+                "ruzzle.slot.console@1".to_string()
             ))
+        );
+        assert_eq!(
+            to_ipc(&Command::Graph),
+            Some(shell_protocol::ShellCommand::Graph)
         );
         assert_eq!(
             to_ipc(&Command::Sysinfo),
@@ -905,7 +1411,14 @@ mod tests {
 
     #[test]
     fn from_ipc_maps_all_commands() {
-        assert_eq!(from_ipc(shell_protocol::ShellCommand::Ps), Command::Ps);
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::Ps { tree: false }),
+            Command::Ps { tree: false }
+        );
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::Ps { tree: true }),
+            Command::Ps { tree: true }
+        );
         assert_eq!(from_ipc(shell_protocol::ShellCommand::Lsmod), Command::Lsmod);
         assert_eq!(
             from_ipc(shell_protocol::ShellCommand::Stop("fs".to_string())),
@@ -920,8 +1433,42 @@ mod tests {
             Command::Help(None)
         );
         assert_eq!(
-            from_ipc(shell_protocol::ShellCommand::Catalog),
-            Command::Catalog
+            from_ipc(shell_protocol::ShellCommand::Catalog {
+                slot: None,
+                verified_only: false
+            }),
+            Command::Catalog {
+                slot: None,
+                verified_only: false
+            }
+        );
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::PieceCheck("fs".to_string())),
+            Command::PieceCheck("fs".to_string())
+        );
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::Ip(Some("add eth0".to_string()))),
+            Command::Ip(Some("add eth0".to_string()))
+        );
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::Route(None)),
+            Command::Route(None)
+        );
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::Mount(Some("memfs /mnt".to_string()))),
+            Command::Mount(Some("memfs /mnt".to_string()))
+        );
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::Df(Some("/".to_string()))),
+            Command::Df(Some("/".to_string()))
+        );
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::Du("/etc".to_string())),
+            Command::Du("/etc".to_string())
+        );
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::MarketScan),
+            Command::MarketScan
         );
         assert_eq!(
             from_ipc(shell_protocol::ShellCommand::Install("fs".to_string())),
@@ -1032,19 +1579,27 @@ mod tests {
         );
         assert_eq!(
             from_ipc(shell_protocol::ShellCommand::Plug {
-                slot: "ruzzle.slot.console".to_string(),
-                module: "console-service".to_string()
+                slot: "ruzzle.slot.console@1".to_string(),
+                module: "console-service".to_string(),
+                dry_run: false,
+                swap: false
             }),
             Command::Plug {
-                slot: "ruzzle.slot.console".to_string(),
-                module: "console-service".to_string()
+                slot: "ruzzle.slot.console@1".to_string(),
+                module: "console-service".to_string(),
+                dry_run: false,
+                swap: false
             }
         );
         assert_eq!(
             from_ipc(shell_protocol::ShellCommand::Unplug(
-                "ruzzle.slot.console".to_string()
+                "ruzzle.slot.console@1".to_string()
             )),
-            Command::Unplug("ruzzle.slot.console".to_string())
+            Command::Unplug("ruzzle.slot.console@1".to_string())
+        );
+        assert_eq!(
+            from_ipc(shell_protocol::ShellCommand::Graph),
+            Command::Graph
         );
         assert_eq!(
             from_ipc(shell_protocol::ShellCommand::Sysinfo),
@@ -1054,7 +1609,7 @@ mod tests {
 
     #[test]
     fn format_help_includes_commands() {
-        let help = format_help();
+        let help = format_help(None);
         assert!(help.contains("ps"));
         assert!(help.contains("lsmod"));
         assert!(help.contains("catalog"));
@@ -1064,11 +1619,34 @@ mod tests {
         assert!(help.contains("login"));
         assert!(help.contains("pwd"));
         assert!(help.contains("slots"));
+        assert!(help.contains("graph"));
         assert!(help.contains("edit"));
         assert!(help.contains("cp"));
         assert!(help.contains("mv"));
         assert!(help.contains("rm"));
         assert!(help.contains("help"));
+    }
+
+    #[test]
+    fn format_help_slot_topic() {
+        let help = format_help(Some("slot"));
+        assert!(help.contains("slots"));
+        assert!(help.contains("plug"));
+    }
+
+    #[test]
+    fn format_help_market_topic() {
+        let help = format_help(Some("market"));
+        assert!(help.contains("catalog"));
+        assert!(help.contains("market scan"));
+        assert!(help.contains("install"));
+    }
+
+    #[test]
+    fn format_help_unknown_topic() {
+        let help = format_help(Some("mystery"));
+        assert!(help.contains("unknown help topic"));
+        assert!(help.contains("commands"));
     }
 
     #[test]
@@ -1128,41 +1706,95 @@ mod tests {
         }];
         let output = format_catalog(&rows);
         assert!(output.contains("fs-service"));
-        assert!(!output.contains("available"));
+        assert!(output.contains("available"));
         assert!(output.contains("ruzzle.fs"));
     }
 
     #[test]
     fn format_slots_handles_empty() {
         let output = format_slots(&[]);
-        assert!(output.contains("slots:"));
+        assert!(output.contains("puzzle board:"));
         assert!(output.contains("<none>"));
     }
 
     #[test]
     fn format_slots_renders_rows() {
         let rows = vec![SlotRow {
-            name: "ruzzle.slot.console".to_string(),
+            name: "ruzzle.slot.console@1".to_string(),
             required: true,
             provider: Some("console-service".to_string()),
         }];
         let output = format_slots(&rows);
-        assert!(output.contains("ruzzle.slot.console"));
-        assert!(output.contains("required"));
+        assert!(output.contains("ruzzle.slot.console@1"));
+        assert!(output.contains("REQUIRED"));
+        assert!(output.contains("[OK ]"));
         assert!(output.contains("console-service"));
     }
 
     #[test]
     fn format_slots_renders_optional_empty() {
         let rows = vec![SlotRow {
-            name: "ruzzle.slot.net".to_string(),
+            name: "ruzzle.slot.net@1".to_string(),
             required: false,
             provider: None,
         }];
         let output = format_slots(&rows);
-        assert!(output.contains("ruzzle.slot.net"));
-        assert!(output.contains("optional"));
+        assert!(output.contains("ruzzle.slot.net@1"));
+        assert!(output.contains("OPTIONAL"));
+        assert!(output.contains("[EMPTY]"));
         assert!(output.contains("<empty>"));
+    }
+
+    #[test]
+    fn format_slots_pads_short_rows() {
+        let rows = vec![
+            SlotRow {
+                name: "ruzzle.slot.console@1".to_string(),
+                required: true,
+                provider: Some("console-service".to_string()),
+            },
+            SlotRow {
+                name: "ruzzle.slot.net@1".to_string(),
+                required: false,
+                provider: None,
+            },
+        ];
+        let output = format_slots(&rows);
+        assert!(output.contains("ruzzle.slot.console@1"));
+        assert!(output.contains("ruzzle.slot.net@1"));
+    }
+
+    #[test]
+    fn format_graph_handles_empty() {
+        let output = format_graph(&[]);
+        assert!(output.contains("puzzle graph:"));
+        assert!(output.contains("<none>"));
+    }
+
+    #[test]
+    fn format_graph_renders_rows() {
+        let rows = vec![GraphRow {
+            name: "file-manager".to_string(),
+            state: "installed".to_string(),
+            depends: vec!["fs-service".to_string(), "user-service".to_string()],
+        }];
+        let output = format_graph(&rows);
+        assert!(output.contains("file-manager"));
+        assert!(output.contains("installed"));
+        assert!(output.contains("fs-service"));
+        assert!(output.contains("user-service"));
+    }
+
+    #[test]
+    fn format_graph_renders_empty_dep_list() {
+        let rows = vec![GraphRow {
+            name: "console-service".to_string(),
+            state: "running".to_string(),
+            depends: Vec::new(),
+        }];
+        let output = format_graph(&rows);
+        assert!(output.contains("console-service"));
+        assert!(output.contains("`- <none>"));
     }
 
     #[test]
