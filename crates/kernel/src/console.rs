@@ -4,9 +4,16 @@ use core::fmt::{self, Write};
 use arch_x86_64 as arch;
 #[cfg(feature = "aarch64")]
 use platform_qemu_aarch64_virt as platform;
+use spin::Mutex;
+
+use kernel_core::FramebufferInfo;
+
+use crate::framebuffer::FramebufferConsole;
+
+static FRAMEBUFFER: Mutex<Option<FramebufferConsole>> = Mutex::new(None);
 
 /// Initializes the early serial console.
-pub fn init() {
+pub fn init_early() {
     #[cfg(feature = "x86_64")]
     {
         arch::init_serial();
@@ -16,6 +23,18 @@ pub fn init() {
     #[cfg(feature = "aarch64")]
     {
         platform::init();
+    }
+}
+
+/// Attaches a framebuffer console if available.
+pub fn init_framebuffer(framebuffer: Option<FramebufferInfo>) {
+    let Some(info) = framebuffer else {
+        return;
+    };
+    if let Some(mut console) = FramebufferConsole::new(info) {
+        console.clear();
+        let mut fb = FRAMEBUFFER.lock();
+        *fb = Some(console);
     }
 }
 
@@ -74,7 +93,12 @@ impl Write for ConsoleWriter {
         #[cfg(feature = "x86_64")]
         {
             arch::serial_write_str(s);
-            arch::vga_write_str(s);
+            let mut fb = FRAMEBUFFER.lock();
+            if let Some(console) = fb.as_mut() {
+                console.write_str(s);
+            } else {
+                arch::vga_write_str(s);
+            }
         }
         #[cfg(feature = "aarch64")]
         {

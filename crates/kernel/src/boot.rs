@@ -1,4 +1,4 @@
-use kernel_core::{BootInfo, MemoryKind, MemoryRegion};
+use kernel_core::{BootInfo, FramebufferInfo, MemoryKind, MemoryRegion};
 use limine::memory_map::{Entry, EntryType};
 use limine::response::MemoryMapResponse;
 
@@ -17,6 +17,7 @@ pub fn build_boot_info(
     kernel_start: u64,
     kernel_end: u64,
     initramfs: Option<(u64, u64)>,
+    framebuffer: Option<FramebufferInfo>,
 ) -> BootInfo<'static> {
     let mut count = 0usize;
     for entry in memory_map.entries() {
@@ -41,6 +42,7 @@ pub fn build_boot_info(
             kernel_end,
             initramfs,
             dtb_ptr: None,
+            framebuffer,
         }
     }
 }

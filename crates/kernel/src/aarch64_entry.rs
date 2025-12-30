@@ -67,7 +67,7 @@ pub extern "C" fn aarch64_entry(dtb_ptr: u64) -> ! {
             cursor = cursor.add(1);
         }
     }
-    kernel::console::init();
+    kernel::console::init_early();
     kprintln!("Ruzzle OS: aarch64 entry");
 
     let kernel_start = unsafe { &__kernel_start as *const u8 as usize };
@@ -85,6 +85,7 @@ pub extern "C" fn aarch64_entry(dtb_ptr: u64) -> ! {
         kernel_end,
         initramfs: None,
         dtb_ptr: Some(dtb_ptr as usize),
+        framebuffer: None,
     };
     kernel::entry(boot_info)
 }

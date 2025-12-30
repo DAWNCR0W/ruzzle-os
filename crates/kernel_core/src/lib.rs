@@ -4,6 +4,7 @@ extern crate alloc;
 
 pub mod boot;
 pub mod caps;
+pub mod crypto;
 pub mod elf;
 pub mod initramfs;
 pub mod ipc;
@@ -14,10 +15,11 @@ pub mod process;
 pub mod protection;
 pub mod runtime;
 pub mod scheduler;
+pub mod smp;
 pub mod syscall;
 pub mod vmm;
 
-pub use boot::{BootInfo, MemoryKind, MemoryRegion};
+pub use boot::{BootInfo, FramebufferInfo, MemoryKind, MemoryRegion};
 pub use caps::{CapSet, Capability};
 pub use elf::{load_elf, parse_elf, ElfLoader, LoadSegment, LoadedElf};
 pub use initramfs::{build_initramfs, parse_initramfs, InitramfsEntry};

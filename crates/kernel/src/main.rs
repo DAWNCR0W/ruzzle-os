@@ -5,16 +5,20 @@ use core::panic::PanicInfo;
 
 #[cfg(feature = "x86_64")]
 use limine::request::{
-    ExecutableAddressRequest, ExecutableFileRequest, MemoryMapRequest, ModuleRequest,
-    RequestsEndMarker, RequestsStartMarker,
+    ExecutableAddressRequest, ExecutableFileRequest, FramebufferRequest, MemoryMapRequest,
+    ModuleRequest, MpRequest, RequestsEndMarker, RequestsStartMarker,
 };
 #[cfg(feature = "x86_64")]
 use limine::BaseRevision;
+#[cfg(feature = "x86_64")]
+use limine::framebuffer::MemoryModel;
 
 use kernel::kprintln;
 
 #[cfg(feature = "x86_64")]
 use kernel::boot::build_boot_info;
+#[cfg(feature = "x86_64")]
+use kernel_core::FramebufferInfo;
 
 #[cfg(feature = "aarch64")]
 mod aarch64_entry;
@@ -51,13 +55,23 @@ static MODULE_REQUEST: ModuleRequest = ModuleRequest::new();
 
 #[cfg(feature = "x86_64")]
 #[used]
+#[link_section = ".limine_requests"]
+static MP_REQUEST: MpRequest = MpRequest::new();
+
+#[cfg(feature = "x86_64")]
+#[used]
+#[link_section = ".limine_requests"]
+static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
+
+#[cfg(feature = "x86_64")]
+#[used]
 #[link_section = ".limine_requests.end"]
 static LIMINE_END: RequestsEndMarker = RequestsEndMarker::new();
 
 #[cfg(feature = "x86_64")]
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    kernel::console::init();
+    kernel::console::init_early();
     kprintln!("Ruzzle OS: limine entry starting");
     if !BASE_REVISION.is_supported() {
         kprintln!("Ruzzle OS: unsupported limine base revision");
@@ -102,7 +116,35 @@ pub extern "C" fn _start() -> ! {
             (start, end)
         });
 
-    let boot_info = build_boot_info(memory_map, kernel_start, kernel_end, initramfs);
+    let framebuffer = FRAMEBUFFER_REQUEST
+        .get_response()
+        .and_then(|response| response.framebuffers().next())
+        .and_then(|fb| {
+            if fb.bpp() < 24 || fb.memory_model() != MemoryModel::RGB {
+                return None;
+            }
+            Some(FramebufferInfo {
+                addr: fb.addr() as u64,
+                width: fb.width() as u32,
+                height: fb.height() as u32,
+                pitch: fb.pitch() as u32,
+                bpp: fb.bpp(),
+                red_mask_size: fb.red_mask_size(),
+                red_mask_shift: fb.red_mask_shift(),
+                green_mask_size: fb.green_mask_size(),
+                green_mask_shift: fb.green_mask_shift(),
+                blue_mask_size: fb.blue_mask_size(),
+                blue_mask_shift: fb.blue_mask_shift(),
+            })
+        });
+
+    let cpu_count = MP_REQUEST
+        .get_response()
+        .map(|response| response.cpus().len())
+        .unwrap_or(1);
+    kernel::smp::init(cpu_count);
+
+    let boot_info = build_boot_info(memory_map, kernel_start, kernel_end, initramfs, framebuffer);
     kernel::entry(boot_info)
 }
 
