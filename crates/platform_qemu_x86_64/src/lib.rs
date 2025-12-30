@@ -10,9 +10,11 @@ pub fn boot_info() -> BootInfo<'static> {
         memory_map: &REGIONS,
         kernel_start: 0,
         kernel_end: 0,
+        kernel_virtual_base: 0,
         initramfs: None,
         dtb_ptr: None,
         framebuffer: None,
+        hhdm_offset: None,
     }
 }
 

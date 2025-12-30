@@ -15,9 +15,11 @@ use platform_qemu_aarch64_virt as platform;
 
 pub mod boot;
 pub mod console;
+#[cfg(feature = "x86_64")]
 mod framebuffer;
+#[cfg(feature = "x86_64")]
 mod font;
-mod smp;
+pub mod smp;
 pub mod allocator;
 pub mod init;
 pub mod shell;
@@ -30,7 +32,17 @@ pub fn entry(boot_info: BootInfo) -> ! {
     allocator::init_heap();
     kprintln!("Ruzzle OS: kernel entry");
     #[cfg(feature = "x86_64")]
+    arch::set_memory_offsets(
+        boot_info.hhdm_offset.unwrap_or(0),
+        boot_info.kernel_virtual_base,
+        boot_info.kernel_start,
+    );
+    #[cfg(feature = "x86_64")]
     arch::init();
+    #[cfg(feature = "x86_64")]
+    arch::virtio_input_init();
+    #[cfg(feature = "x86_64")]
+    arch::usb_input_init();
     #[cfg(feature = "aarch64")]
     arch::init();
     #[cfg(feature = "x86_64")]

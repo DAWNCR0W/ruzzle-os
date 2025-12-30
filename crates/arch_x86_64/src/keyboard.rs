@@ -81,8 +81,8 @@ fn init_controller() {
 fn flush_output() {
     while keyboard_has_data() {
         let _ = unsafe {
-            let mut data = Port::new(DATA_PORT);
-            data.read::<u8>()
+            let mut data: Port<u8> = Port::new(DATA_PORT);
+            data.read()
         };
     }
 }
@@ -100,8 +100,8 @@ fn read_data() -> Option<u8> {
 fn wait_input_empty() -> bool {
     for _ in 0..10000 {
         let status = unsafe {
-            let mut port = Port::new(STATUS_PORT);
-            port.read::<u8>()
+            let mut port: Port<u8> = Port::new(STATUS_PORT);
+            port.read()
         };
         if status & 0x02 == 0 {
             return true;
@@ -113,8 +113,8 @@ fn wait_input_empty() -> bool {
 fn wait_output_full() -> bool {
     for _ in 0..10000 {
         let status = unsafe {
-            let mut port = Port::new(STATUS_PORT);
-            port.read::<u8>()
+            let mut port: Port<u8> = Port::new(STATUS_PORT);
+            port.read()
         };
         if status & 0x01 != 0 {
             return true;

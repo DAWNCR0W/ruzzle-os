@@ -56,6 +56,7 @@ dependencies = [
  "spin",
  "user_file_manager",
  "user_fs_service",
+ "user_net_service",
  "user_puzzle_board",
  "user_session_service",
  "user_settings_service",

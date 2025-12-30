@@ -6,9 +6,11 @@ pub struct BootInfo<'a> {
     pub memory_map: &'a [MemoryRegion],
     pub kernel_start: PhysAddr,
     pub kernel_end: PhysAddr,
+    pub kernel_virtual_base: PhysAddr,
     pub initramfs: Option<(PhysAddr, PhysAddr)>,
     pub dtb_ptr: Option<PhysAddr>,
     pub framebuffer: Option<FramebufferInfo>,
+    pub hhdm_offset: Option<PhysAddr>,
 }
 
 /// Describes a contiguous physical memory region.
@@ -58,9 +60,11 @@ mod tests {
             memory_map: &regions,
             kernel_start: 0x0,
             kernel_end: 0x1000,
+            kernel_virtual_base: 0xFFFF_8000_0000_0000,
             initramfs: None,
             dtb_ptr: None,
             framebuffer: None,
+            hhdm_offset: None,
         };
         assert_eq!(info.memory_map.len(), 1);
         assert_eq!(info.memory_map[0].kind, MemoryKind::Usable);

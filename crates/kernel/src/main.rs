@@ -5,13 +5,11 @@ use core::panic::PanicInfo;
 
 #[cfg(feature = "x86_64")]
 use limine::request::{
-    ExecutableAddressRequest, ExecutableFileRequest, FramebufferRequest, MemoryMapRequest,
-    ModuleRequest, MpRequest, RequestsEndMarker, RequestsStartMarker,
+    ExecutableAddressRequest, ExecutableFileRequest, FramebufferRequest, HhdmRequest,
+    MemoryMapRequest, ModuleRequest, MpRequest, RequestsEndMarker, RequestsStartMarker,
 };
 #[cfg(feature = "x86_64")]
 use limine::BaseRevision;
-#[cfg(feature = "x86_64")]
-use limine::framebuffer::MemoryModel;
 
 use kernel::kprintln;
 
@@ -37,6 +35,10 @@ static BASE_REVISION: BaseRevision = BaseRevision::with_revision(0);
 #[used]
 #[link_section = ".limine_requests"]
 static MEMORY_MAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
+#[cfg(feature = "x86_64")]
+#[used]
+#[link_section = ".limine_requests"]
+static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 
 #[cfg(feature = "x86_64")]
 #[used]
@@ -106,6 +108,7 @@ pub extern "C" fn _start() -> ! {
 
     let kernel_start = exec_addr.physical_base();
     let kernel_end = kernel_start + exec_file.file().size();
+    let kernel_virtual_base = exec_addr.virtual_base();
 
     let initramfs = MODULE_REQUEST
         .get_response()
@@ -120,7 +123,10 @@ pub extern "C" fn _start() -> ! {
         .get_response()
         .and_then(|response| response.framebuffers().next())
         .and_then(|fb| {
-            if fb.bpp() < 24 || fb.memory_model() != MemoryModel::RGB {
+            if fb.bpp() < 24 {
+                return None;
+            }
+            if fb.red_mask_size() == 0 || fb.green_mask_size() == 0 || fb.blue_mask_size() == 0 {
                 return None;
             }
             Some(FramebufferInfo {
@@ -144,7 +150,18 @@ pub extern "C" fn _start() -> ! {
         .unwrap_or(1);
     kernel::smp::init(cpu_count);
 
-    let boot_info = build_boot_info(memory_map, kernel_start, kernel_end, initramfs, framebuffer);
+    let hhdm_offset = HHDM_REQUEST
+        .get_response()
+        .map(|response| response.offset());
+    let boot_info = build_boot_info(
+        memory_map,
+        kernel_start,
+        kernel_end,
+        kernel_virtual_base,
+        initramfs,
+        framebuffer,
+        hhdm_offset,
+    );
     kernel::entry(boot_info)
 }
 

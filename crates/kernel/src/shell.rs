@@ -159,7 +159,7 @@ impl ShellState {
             Command::Unknown(_) => {
                 if !raw.trim().is_empty() {
                     kprintln!("{}", format_unknown_command(raw.trim()));
-                    self.print_help();
+                    self.print_help(None);
                 }
             }
         }
@@ -1219,7 +1219,8 @@ impl ShellState {
                     }
                     return;
                 }
-                let Some(current) = self.board.provider_for(slot) else {
+                let Some(current) = self.board.provider_for(slot).map(|provider| provider.to_string())
+                else {
                     kprintln!("swap failed: cannot resolve provider");
                     return;
                 };
@@ -1246,12 +1247,12 @@ impl ShellState {
                 };
                 match self.board.unplug(slot) {
                     Ok(_) => match self.board.plug(slot, module, &manifest.slots) {
-                        Ok(()) => kprintln!("swapped {} -> {} (was {})", slot, module, current),
-                        Err(err) => {
-                            let rollback = self
-                                .board
-                                .plug(slot, current, &old_manifest.slots)
-                                .is_ok();
+                    Ok(()) => kprintln!("swapped {} -> {} (was {})", slot, module, current),
+                    Err(err) => {
+                        let rollback = self
+                            .board
+                            .plug(slot, current.as_str(), &old_manifest.slots)
+                            .is_ok();
                             if rollback {
                                 kprintln!("swap failed: {:?} (rolled back)", err);
                             } else {

@@ -63,9 +63,11 @@ pub fn boot_info_from_dtb(
             ),
             kernel_start: kernel_start as u64,
             kernel_end: kernel_end as u64,
+            kernel_virtual_base: kernel_start as u64,
             initramfs: info.initrd.map(|(start, end)| (start, end)),
             dtb_ptr: Some(dtb_ptr as u64),
             framebuffer: None,
+            hhdm_offset: None,
         }
     }
 }
