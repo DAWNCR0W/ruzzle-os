@@ -65,7 +65,7 @@ cat > "${DEST_DIR}/module.toml" <<EOF
 name = "${PIECE_NAME}"
 version = "0.1.0"
 provides = ["ruzzle.${PIECE_NAME}"]
-slots = ["ruzzle.slot.editor"]
+slots = ["ruzzle.slot.editor@1"]
 requires_caps = []
 depends = []
 EOF

@@ -3,12 +3,16 @@ extern crate alloc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use crate::crypto::hmac_sha256_parts;
 use crate::module::{parse_module_manifest, ModuleManifest};
 use crate::Errno;
 
 const BUNDLE_MAGIC: &[u8; 4] = b"RMOD";
-const BUNDLE_VERSION: u16 = 1;
+const BUNDLE_VERSION_V1: u16 = 1;
+const BUNDLE_VERSION_V2: u16 = 2;
 const HEADER_LEN: usize = 4 + 2 + 4 + 4;
+const SIGNATURE_LEN: usize = 32;
+const MARKETPLACE_KEY: &[u8] = b"ruzzle-dev-key";
 
 /// A parsed module bundle containing manifest metadata and ELF payload bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +20,8 @@ pub struct ModuleBundle {
     pub manifest_text: String,
     pub manifest: ModuleManifest,
     pub payload: Vec<u8>,
+    pub signature: Option<[u8; SIGNATURE_LEN]>,
+    pub verified: bool,
 }
 
 /// Builds a module bundle from a manifest string and raw payload.
@@ -30,13 +36,16 @@ pub fn build_module_bundle(manifest_text: &str, payload: &[u8]) -> Result<Vec<u8
     let manifest_len = manifest_bytes.len() as u32;
     let payload_len = payload.len() as u32;
 
-    let mut out = Vec::with_capacity(HEADER_LEN + manifest_bytes.len() + payload.len());
+    let signature = hmac_sha256_parts(MARKETPLACE_KEY, &[manifest_bytes, payload]);
+    let mut out =
+        Vec::with_capacity(HEADER_LEN + manifest_bytes.len() + payload.len() + SIGNATURE_LEN);
     out.extend_from_slice(BUNDLE_MAGIC);
-    out.extend_from_slice(&BUNDLE_VERSION.to_le_bytes());
+    out.extend_from_slice(&BUNDLE_VERSION_V2.to_le_bytes());
     out.extend_from_slice(&manifest_len.to_le_bytes());
     out.extend_from_slice(&payload_len.to_le_bytes());
     out.extend_from_slice(manifest_bytes);
     out.extend_from_slice(payload);
+    out.extend_from_slice(&signature);
     Ok(out)
 }
 
@@ -51,25 +60,19 @@ pub fn parse_module_bundle(bytes: &[u8]) -> Result<ModuleBundle, Errno> {
     }
 
     let version = u16::from_le_bytes([bytes[4], bytes[5]]);
-    if version != BUNDLE_VERSION {
+    if version != BUNDLE_VERSION_V1 && version != BUNDLE_VERSION_V2 {
         return Err(Errno::InvalidArg);
     }
 
     let manifest_len = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) as usize;
     let payload_len = u32::from_le_bytes([bytes[10], bytes[11], bytes[12], bytes[13]]) as usize;
 
-    let available = bytes.len() - HEADER_LEN;
-    if manifest_len > available {
-        return Err(Errno::InvalidArg);
-    }
-    let remaining = available - manifest_len;
-    if payload_len > remaining {
-        return Err(Errno::InvalidArg);
-    }
-
     let manifest_start = HEADER_LEN;
     let manifest_end = manifest_start + manifest_len;
     let payload_end = manifest_end + payload_len;
+    if payload_end > bytes.len() {
+        return Err(Errno::InvalidArg);
+    }
 
     let manifest_bytes = &bytes[manifest_start..manifest_end];
     let payload = bytes[manifest_end..payload_end].to_vec();
@@ -79,10 +82,31 @@ pub fn parse_module_bundle(bytes: &[u8]) -> Result<ModuleBundle, Errno> {
         .to_string();
     let manifest = parse_module_manifest(&manifest_text)?;
 
+    let (signature, verified) = if version == BUNDLE_VERSION_V1 {
+        if payload_end != bytes.len() {
+            return Err(Errno::InvalidArg);
+        }
+        (None, false)
+    } else {
+        let sig_end = payload_end + SIGNATURE_LEN;
+        if sig_end != bytes.len() {
+            return Err(Errno::InvalidArg);
+        }
+        let mut sig = [0u8; SIGNATURE_LEN];
+        sig.copy_from_slice(&bytes[payload_end..sig_end]);
+        let expected = hmac_sha256_parts(MARKETPLACE_KEY, &[manifest_bytes, &payload]);
+        if sig != expected {
+            return Err(Errno::InvalidArg);
+        }
+        (Some(sig), true)
+    };
+
     Ok(ModuleBundle {
         manifest_text,
         manifest,
         payload,
+        signature,
+        verified,
     })
 }
 
@@ -95,7 +119,7 @@ mod tests {
 name = "fs-service"
 version = "0.1.0"
 provides = ["ruzzle.fs"]
-slots = ["ruzzle.slot.fs"]
+slots = ["ruzzle.slot.fs@1"]
 requires_caps = ["FsRoot"]
 depends = []
 "#
@@ -109,6 +133,8 @@ depends = []
         assert_eq!(bundle.manifest.name, "fs-service");
         assert_eq!(bundle.manifest.provides, vec!["ruzzle.fs"]);
         assert_eq!(bundle.payload, payload);
+        assert!(bundle.verified);
+        assert!(bundle.signature.is_some());
     }
 
     #[test]
@@ -160,7 +186,7 @@ depends = []
         let manifest_text = "name = \"fs-service\"";
         let mut bytes = Vec::new();
         bytes.extend_from_slice(BUNDLE_MAGIC);
-        bytes.extend_from_slice(&BUNDLE_VERSION.to_le_bytes());
+        bytes.extend_from_slice(&BUNDLE_VERSION_V1.to_le_bytes());
         bytes.extend_from_slice(&(manifest_text.len() as u32).to_le_bytes());
         bytes.extend_from_slice(&2u32.to_le_bytes());
         bytes.extend_from_slice(manifest_text.as_bytes());
@@ -184,9 +210,67 @@ depends = []
     fn parse_rejects_length_overflow() {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(BUNDLE_MAGIC);
-        bytes.extend_from_slice(&BUNDLE_VERSION.to_le_bytes());
+        bytes.extend_from_slice(&BUNDLE_VERSION_V2.to_le_bytes());
         bytes.extend_from_slice(&u32::MAX.to_le_bytes());
         bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(parse_module_bundle(&bytes), Err(Errno::InvalidArg));
+    }
+
+    #[test]
+    fn parse_accepts_v1_bundle_as_unsigned() {
+        let payload = vec![9u8, 9, 9];
+        let manifest_text = example_manifest();
+        let manifest_bytes = manifest_text.as_bytes();
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(BUNDLE_MAGIC);
+        bytes.extend_from_slice(&BUNDLE_VERSION_V1.to_le_bytes());
+        bytes.extend_from_slice(&(manifest_bytes.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(manifest_bytes);
+        bytes.extend_from_slice(&payload);
+        let bundle = parse_module_bundle(&bytes).expect("v1 bundle should parse");
+        assert!(!bundle.verified);
+        assert!(bundle.signature.is_none());
+    }
+
+    #[test]
+    fn parse_rejects_v1_with_trailing_bytes() {
+        let payload = vec![7u8, 7];
+        let manifest_text = example_manifest();
+        let manifest_bytes = manifest_text.as_bytes();
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(BUNDLE_MAGIC);
+        bytes.extend_from_slice(&BUNDLE_VERSION_V1.to_le_bytes());
+        bytes.extend_from_slice(&(manifest_bytes.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(manifest_bytes);
+        bytes.extend_from_slice(&payload);
+        bytes.extend_from_slice(&[0x00, 0x01]);
+        assert_eq!(parse_module_bundle(&bytes), Err(Errno::InvalidArg));
+    }
+
+    #[test]
+    fn parse_rejects_v2_with_trailing_bytes() {
+        let payload = vec![4u8, 5, 6];
+        let mut bytes = build_module_bundle(example_manifest(), &payload).unwrap();
+        bytes.push(0x42);
+        assert_eq!(parse_module_bundle(&bytes), Err(Errno::InvalidArg));
+    }
+
+    #[test]
+    fn parse_rejects_missing_signature() {
+        let payload = vec![1u8, 2, 3];
+        let mut bytes = build_module_bundle(example_manifest(), &payload).unwrap();
+        bytes.truncate(bytes.len() - SIGNATURE_LEN);
+        assert_eq!(parse_module_bundle(&bytes), Err(Errno::InvalidArg));
+    }
+
+    #[test]
+    fn parse_rejects_invalid_signature() {
+        let payload = vec![1u8, 2, 3];
+        let mut bytes = build_module_bundle(example_manifest(), &payload).unwrap();
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0xFF;
         assert_eq!(parse_module_bundle(&bytes), Err(Errno::InvalidArg));
     }
 }

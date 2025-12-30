@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.editor@1"
+summary = "Text editor service for the built-in edit/vim commands."
+provides = ["ruzzle.editor"]
+requires_caps = []

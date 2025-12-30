@@ -1,6 +1,8 @@
 #![no_std]
 #![feature(abi_x86_interrupt)]
 
+extern crate alloc;
+
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use pic8259::ChainedPics;
@@ -14,6 +16,8 @@ use x86_64::structures::tss::TaskStateSegment;
 use x86_64::VirtAddr;
 
 mod keyboard;
+mod usb_input;
+mod virtio_input;
 mod vga;
 
 /// Primary 8259 PIC offset for hardware interrupts.
@@ -31,13 +35,39 @@ const PIT_BASE_FREQUENCY: u32 = 1_193_182;
 static PICS: Mutex<ChainedPics> =
     Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
 static TICKS: AtomicU64 = AtomicU64::new(0);
+static HHDM_OFFSET: AtomicU64 = AtomicU64::new(0);
+static KERNEL_VIRT_BASE: AtomicU64 = AtomicU64::new(0);
+static KERNEL_PHYS_BASE: AtomicU64 = AtomicU64::new(0);
 
 static TSS: Once<TaskStateSegment> = Once::new();
 static GDT: Once<(GlobalDescriptorTable, Selectors)> = Once::new();
 static IDT: Once<InterruptDescriptorTable> = Once::new();
 
 pub use keyboard::{keyboard_has_data, keyboard_init, keyboard_read_byte};
+pub use usb_input::{usb_input_has_data, usb_input_init, usb_input_read_byte};
+pub use virtio_input::{virtio_input_has_data, virtio_input_init, virtio_input_read_byte};
 pub use vga::{vga_init, vga_write_str};
+
+/// Stores memory offsets used for MMIO and DMA translations.
+pub fn set_memory_offsets(hhdm_offset: u64, kernel_virtual_base: u64, kernel_physical_base: u64) {
+    HHDM_OFFSET.store(hhdm_offset, Ordering::Relaxed);
+    KERNEL_VIRT_BASE.store(kernel_virtual_base, Ordering::Relaxed);
+    KERNEL_PHYS_BASE.store(kernel_physical_base, Ordering::Relaxed);
+}
+
+/// Converts a physical address to a higher-half direct map virtual address.
+pub fn phys_to_virt(phys: u64) -> *mut u8 {
+    let offset = HHDM_OFFSET.load(Ordering::Relaxed);
+    (phys + offset) as *mut u8
+}
+
+/// Converts a kernel virtual address to a physical address.
+pub fn virt_to_phys(ptr: *const u8) -> u64 {
+    let virt = ptr as u64;
+    let virt_base = KERNEL_VIRT_BASE.load(Ordering::Relaxed);
+    let phys_base = KERNEL_PHYS_BASE.load(Ordering::Relaxed);
+    virt.saturating_sub(virt_base).saturating_add(phys_base)
+}
 
 struct Selectors {
     code_selector: SegmentSelector,

@@ -23,11 +23,11 @@ All higher-level functionality is implemented as user-space modules.
   - appliance-style OS
   - specialized runtime environments
 - Provide a **first-boot experience** that creates the initial user and base system layout.
+- Provide **SMP groundwork** (topology discovery + scheduling scaffolding).
 
 ### 1.3 Non-goals
 - Full POSIX compliance
 - Broad hardware support (initially QEMU targets only)
-- SMP / multi-core scheduling (v0.1)
 - Complex filesystems (disk-based)
 - Kernel-integrated GUI/network stacks
 
@@ -52,6 +52,14 @@ All higher-level functionality is implemented as user-space modules.
 - shells and UI stacks
 - filesystem service
 - networking service
+- network manager (profiles/policies)
+- input service (USB/virtio aggregation)
+- device manager (inventory + driver bindings)
+- toolchain service (host build integration)
+- container service (Docker-style lifecycle)
+- server stack service (HTTP/TLS/metrics)
+- GPU service (render/compute)
+- ML runtime service
 - device drivers (where feasible)
 - runtimes and applications
 
@@ -207,11 +215,12 @@ A module is:
 - an **ELF64 user-space program**
 - with an optional `module.toml` manifest
 - declaring the **slots** it can fill
+- packaged as a signed `.rpiece` bundle for marketplace installs
 
 ### 8.2 Manifest Schema (v0.1)
 - name, version
 - provided services (endpoint names)
-- **slots** (puzzle compatibility)
+- **slots** (puzzle compatibility, versioned as `ruzzle.slot.<name>@<version>`)
 - required capabilities
 - dependencies
 
@@ -220,7 +229,7 @@ Example:
 name = "console-service"
 version = "0.1.0"
 provides = ["ruzzle.console"]
-slots = ["ruzzle.slot.console"]
+slots = ["ruzzle.slot.console@1"]
 requires_caps = ["ConsoleWrite", "EndpointCreate"]
 depends = []
 ```
@@ -247,9 +256,21 @@ depends = []
 - `gpu-service`
 - `window-service`
 - `net-service`
+- `net-manager`
+- `device-manager`
+- `server-stack`
+- `docker-service`
+- `rust-toolchain`
+- `ml-runtime`
 - `any-runtime`
 
 > The OS is defined by the selected module set.
+
+### 8.5 Slot Contracts
+
+Slot contracts define the expected interface for each puzzle slot (summary,
+provided services, required capabilities). Contracts live in
+`slot_contracts/*.toml` and are rendered into `docs/slot_contracts.md`.
 
 ---
 
@@ -269,6 +290,18 @@ A system is considered Ruzzle-compatible if:
 
 ---
 
+## 9.1 Shell Utilities (v0.1)
+
+Baseline shell tools available in the TUI shell:
+
+- `ps [--tree]`
+- `ip` / `route`
+- `mount`
+- `df [path]`
+- `du <path>`
+
+---
+
 ## 10. Acceptance Tests (v0.1)
 
 A v0.1-compliant Ruzzle OS build must demonstrate:
@@ -279,4 +312,3 @@ A v0.1-compliant Ruzzle OS build must demonstrate:
 * user process attempts to access kernel memory → process killed, kernel survives
 * capability enforcement proof: a process without `ConsoleWrite` cannot write directly to device
 * first boot wizard creates an initial user and base directories
-

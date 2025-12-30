@@ -1,0 +1,6 @@
+name = "rust-toolchain"
+version = "0.1.0"
+provides = ["ruzzle.toolchain"]
+slots = ["ruzzle.slot.toolchain@1"]
+requires_caps = []
+depends = []

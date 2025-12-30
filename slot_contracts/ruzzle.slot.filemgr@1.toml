@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.filemgr@1"
+summary = "File manager service for browsing and managing files."
+provides = ["ruzzle.filemgr"]
+requires_caps = []

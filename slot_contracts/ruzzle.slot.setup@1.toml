@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.setup@1"
+summary = "First-boot setup wizard service."
+provides = ["ruzzle.setup"]
+requires_caps = []

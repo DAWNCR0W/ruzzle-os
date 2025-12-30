@@ -1,4 +1,8 @@
 # Ruzzle OS 🧩
+![CI](https://github.com/DAWNCR0W/ruzzle-os/actions/workflows/ci.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/DAWNCR0W/ruzzle-os)
+![License](https://img.shields.io/github/license/DAWNCR0W/ruzzle-os)
+
 **A Rust-based, ultra-lightweight, puzzle-frame operating system** where **everything is a puzzle piece**.
 
 Ruzzle OS is designed as a **minimal kernel “frame”** that provides only the essential security boundaries and system primitives (user mode isolation, memory protection, scheduling, IPC, capabilities).  
@@ -28,6 +32,7 @@ Ruzzle OS is a **composition platform**:
 - **Small Trusted Computing Base (TCB):** Keep kernel complexity minimal.
 - **Capability-First Security:** Privileges are explicit and transferable.
 - **Composable UX:** Your environment evolves by plugging in modules.
+- **Signed Pieces:** Marketplace bundles are signed before install.
 
 ---
 
@@ -39,7 +44,7 @@ Modules declare which **slots** they can fill inside `module.toml`:
 name = "console-service"
 version = "0.1.0"
 provides = ["ruzzle.console"]
-slots = ["ruzzle.slot.console"]
+slots = ["ruzzle.slot.console@1"]
 requires_caps = ["ConsoleWrite"]
 depends = []
 ```
@@ -53,6 +58,8 @@ unplug <slot>
 ```
 
 This makes the **shape** of the OS visible: which slots are required, which are filled, and which pieces can snap in.
+
+Slot contracts are versioned (`@1`) so the shape can evolve without breaking existing pieces.
 
 ---
 
@@ -88,6 +95,12 @@ This makes the **shape** of the OS visible: which slots are required, which are 
 - Input service (optional)
 - GPU service (optional)
 - Network service (optional)
+- Network manager (profiles/policies)
+- Device manager (drivers/bindings)
+- Toolchain service (host build integration)
+- Container service (Docker-style lifecycle)
+- Server stack (HTTP/TLS/metrics)
+- ML runtime (model execution)
 - Any runtime or application you want
 
 ---

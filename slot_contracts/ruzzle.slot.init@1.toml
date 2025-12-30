@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.init@1"
+summary = "Module manager and init process."
+provides = ["ruzzle.init"]
+requires_caps = ["ProcessSpawn", "EndpointCreate"]

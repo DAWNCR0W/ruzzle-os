@@ -1,0 +1,17 @@
+[package]
+name = "user_net_manager"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+user_net_service = { path = "../user_net_service" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "net-manager"
+path = "src/main.rs"
+test = false
+bench = false

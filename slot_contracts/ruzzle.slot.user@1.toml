@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.user@1"
+summary = "User management service for accounts and identities."
+provides = ["ruzzle.user"]
+requires_caps = []

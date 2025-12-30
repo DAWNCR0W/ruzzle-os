@@ -56,6 +56,7 @@ dependencies = [
  "spin",
  "user_file_manager",
  "user_fs_service",
+ "user_net_service",
  "user_puzzle_board",
  "user_session_service",
  "user_settings_service",
@@ -166,6 +167,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "user_container_service"
+version = "0.1.0"
+
+[[package]]
+name = "user_device_manager"
+version = "0.1.0"
+
+[[package]]
 name = "user_file_manager"
 version = "0.1.0"
 dependencies = [
@@ -177,6 +186,10 @@ name = "user_fs_service"
 version = "0.1.0"
 
 [[package]]
+name = "user_gpu_service"
+version = "0.1.0"
+
+[[package]]
 name = "user_init"
 version = "0.1.0"
 dependencies = [
@@ -185,11 +198,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "user_input_service"
+version = "0.1.0"
+
+[[package]]
+name = "user_ml_runtime"
+version = "0.1.0"
+dependencies = [
+ "user_gpu_service",
+]
+
+[[package]]
+name = "user_net_manager"
+version = "0.1.0"
+dependencies = [
+ "user_net_service",
+]
+
+[[package]]
 name = "user_net_service"
 version = "0.1.0"
 
 [[package]]
 name = "user_puzzle_board"
+version = "0.1.0"
+
+[[package]]
+name = "user_rust_toolchain"
+version = "0.1.0"
+
+[[package]]
+name = "user_server_stack"
 version = "0.1.0"
 
 [[package]]

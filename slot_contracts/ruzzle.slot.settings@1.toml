@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.settings@1"
+summary = "System settings service for hostname, locale, and preferences."
+provides = ["ruzzle.settings"]
+requires_caps = []

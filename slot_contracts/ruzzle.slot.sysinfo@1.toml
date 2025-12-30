@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.sysinfo@1"
+summary = "System information reporting service."
+provides = ["ruzzle.sysinfo"]
+requires_caps = []

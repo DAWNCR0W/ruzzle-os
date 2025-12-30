@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.device@1"
+summary = "Device inventory and driver binding service."
+provides = ["ruzzle.device"]
+requires_caps = []

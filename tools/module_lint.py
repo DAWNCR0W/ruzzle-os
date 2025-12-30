@@ -27,7 +27,7 @@ CAPABILITIES = {
 
 SEGMENT_RE = r"[a-z0-9-]+"
 SERVICE_RE = re.compile(rf"^ruzzle\.(?:{SEGMENT_RE}\.)*{SEGMENT_RE}$")
-SLOT_RE = re.compile(rf"^ruzzle\.slot\.(?:{SEGMENT_RE}\.)*{SEGMENT_RE}$")
+SLOT_RE = re.compile(rf"^ruzzle\.slot\.(?:{SEGMENT_RE}\.)*{SEGMENT_RE}@\d+$")
 MODULE_RE = re.compile(rf"^{SEGMENT_RE}(?:-{SEGMENT_RE})*$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9._-]+)?$")
 

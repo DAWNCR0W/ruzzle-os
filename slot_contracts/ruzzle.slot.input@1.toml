@@ -1,0 +1,4 @@
+slot = "ruzzle.slot.input@1"
+summary = "Input device aggregation (USB/virtio/PS2)."
+provides = ["ruzzle.input"]
+requires_caps = ["InputDevice"]
