@@ -1,4 +1,8 @@
 # Ruzzle OS 🧩
+![CI](https://github.com/DAWNCR0W/ruzzle-os/actions/workflows/ci.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/DAWNCR0W/ruzzle-os)
+![License](https://img.shields.io/github/license/DAWNCR0W/ruzzle-os)
+
 **A Rust-based, ultra-lightweight, puzzle-frame operating system** where **everything is a puzzle piece**.
 
 Ruzzle OS is designed as a **minimal kernel “frame”** that provides only the essential security boundaries and system primitives (user mode isolation, memory protection, scheduling, IPC, capabilities).  

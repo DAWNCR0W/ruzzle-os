@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "질문/토론"
+    url: "https://github.com/DAWNCR0W/ruzzle-os/discussions"
+    about: "질문이나 아이디어 공유는 Discussions를 이용해주세요."

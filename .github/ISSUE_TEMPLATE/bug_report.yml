@@ -1,0 +1,55 @@
+name: "버그 리포트"
+description: "문제 재현과 환경 정보를 포함해 주세요."
+title: "[버그] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: "요약"
+      description: "무슨 문제가 발생했는지 간단히 적어주세요."
+      placeholder: "예: UTM에서 키보드 입력이 동작하지 않음"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "재현 절차"
+      description: "순서대로 작성해주세요."
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "기대 결과"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: "실제 결과"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: "로그/스크린샷"
+      description: "가능하면 콘솔 로그 또는 스크린샷을 첨부해 주세요."
+  - type: dropdown
+    id: environment
+    attributes:
+      label: "실행 환경"
+      options:
+        - "QEMU x86_64"
+        - "UTM x86_64"
+        - "QEMU AArch64"
+        - "UTM AArch64"
+        - "기타"
+    validations:
+      required: true
+  - type: textarea
+    id: version
+    attributes:
+      label: "버전/커밋"
+      description: "태그 또는 커밋 해시를 적어주세요."
